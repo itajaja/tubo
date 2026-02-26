@@ -118,27 +118,24 @@ function VideoCard({
 function ChannelPills({
   channels,
   channelInfos,
-  selectedChannel,
-  onSelect,
-  onAdd,
-  onRemove,
+  selectedChannels,
+  onToggle,
+  onSelectAll,
+  onOnly,
 }: {
   channels: string[];
   channelInfos: Map<string, ChannelInfo>;
-  selectedChannel: string | null;
-  onSelect: (handle: string | null) => void;
-  onAdd: (handle: string) => void;
-  onRemove: (handle: string) => void;
+  selectedChannels: Set<string>;
+  onToggle: (handle: string) => void;
+  onSelectAll: () => void;
+  onOnly: (handle: string) => void;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [input, setInput] = useState("");
-
   return (
     <div className="flex flex-wrap gap-2 px-1 mb-3">
       <button
-        onClick={() => onSelect(null)}
+        onClick={() => onSelectAll()}
         className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
-          selectedChannel === null
+          selectedChannels.size === channels.length
             ? "bg-[#7a6a50] text-[#1c1714]"
             : "bg-[#252019] text-[#8a7e6e] hover:bg-[#302a22]"
         }`}
@@ -148,11 +145,11 @@ function ChannelPills({
       {channels.map((handle) => {
         const info = channelInfos.get(handle);
         const label = info?.title || handle;
-        const isSelected = selectedChannel === handle;
+        const isSelected = selectedChannels.has(handle);
         return (
           <div key={handle} className="group relative">
             <button
-              onClick={() => onSelect(isSelected ? null : handle)}
+              onClick={() => onToggle(handle)}
               className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
                 isSelected
                   ? "bg-[#7a6a50] text-[#1c1714]"
@@ -164,46 +161,139 @@ function ChannelPills({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onRemove(handle);
+                onOnly(handle);
               }}
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#3a332a] text-[#8a7e6e] text-[10px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-red-500 hover:text-white"
+              className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-[#3a332a] text-[#8a7e6e] text-[10px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-[#7a6a50] hover:text-[#1c1714]"
             >
-              &times;
+              only
             </button>
           </div>
         );
       })}
-      {adding ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (input.trim()) {
-              onAdd(input.trim());
-              setInput("");
-              setAdding(false);
-            }
-          }}
-          className="flex items-center gap-1"
-        >
-          <input
-            autoFocus
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onBlur={() => {
-              if (!input.trim()) setAdding(false);
+    </div>
+  );
+}
+
+function SettingsPanel({
+  channels,
+  channelInfos,
+  onAdd,
+  onRemove,
+  onClose,
+}: {
+  channels: string[];
+  channelInfos: Map<string, ChannelInfo>;
+  onAdd: (handle: string) => void;
+  onRemove: (handle: string) => void;
+  onClose: () => void;
+}) {
+  const [newChannel, setNewChannel] = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const currentKey = getApiKey() || "";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="bg-[#252019] border border-[#3a332a] rounded-2xl w-full max-w-md mx-4 p-6 space-y-6 max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-[#d4c5b0]">Settings</h2>
+          <button
+            onClick={onClose}
+            className="text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Channels section */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#8a7e6e] uppercase tracking-wider">Channels</h3>
+          <div className="space-y-1">
+            {channels.map((handle) => {
+              const info = channelInfos.get(handle);
+              const label = info?.title || handle;
+              return (
+                <div key={handle} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#1c1714]">
+                  <span className="text-sm text-[#c4b5a0]">{label} <span className="text-[#5a5044]">@{handle}</span></span>
+                  <button
+                    onClick={() => onRemove(handle)}
+                    className="text-[#5a5044] hover:text-red-400 cursor-pointer text-sm"
+                  >
+                    &times;
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newChannel.trim()) {
+                onAdd(newChannel.trim());
+                setNewChannel("");
+              }
             }}
-            placeholder="@handle"
-            className="px-2 py-1 rounded-full text-xs bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] w-28"
-          />
-        </form>
-      ) : (
-        <button
-          onClick={() => setAdding(true)}
-          className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer bg-[#252019] border border-dashed border-[#3a332a] text-[#5a5044] hover:border-[#5a5044] hover:text-[#8a7e6e] transition-colors"
-        >
-          +
-        </button>
-      )}
+            className="flex gap-2"
+          >
+            <input
+              value={newChannel}
+              onChange={(e) => setNewChannel(e.target.value)}
+              placeholder="@handle"
+              className="flex-1 px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-[#7a6a50] hover:bg-[#8a7a60] text-[#1c1714] font-medium cursor-pointer text-sm"
+            >
+              Add
+            </button>
+          </form>
+        </div>
+
+        {/* API Key section */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#8a7e6e] uppercase tracking-wider">API Key</h3>
+          <p className="text-xs text-[#5a5044]">
+            Current: {currentKey ? (showApiKey ? currentKey : currentKey.slice(0, 6) + "\u2026" + currentKey.slice(-4)) : "Not set"}
+            {currentKey && (
+              <button
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="ml-2 underline hover:text-[#8a7e6e] cursor-pointer"
+              >
+                {showApiKey ? "hide" : "show"}
+              </button>
+            )}
+          </p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (apiKeyInput.trim()) {
+                setApiKey(apiKeyInput.trim());
+                setApiKeyInput("");
+                onClose();
+                window.location.reload();
+              }
+            }}
+            className="flex gap-2"
+          >
+            <input
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="New API key..."
+              className="flex-1 px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-[#7a6a50] hover:bg-[#8a7a60] text-[#1c1714] font-medium cursor-pointer text-sm"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
@@ -219,7 +309,7 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
-  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(channels));
   const [watchedIds, setWatchedIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem("tubo_watched");
@@ -228,6 +318,7 @@ export default function App() {
       return new Set();
     }
   });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const markWatched = useCallback((videoId: string) => {
     setWatchedIds((prev) => {
@@ -298,7 +389,7 @@ export default function App() {
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current) return;
     const tokens = pageTokensRef.current;
-    const handles = selectedChannel ? [selectedChannel].filter(h => tokens[h]) : Object.keys(tokens);
+    const handles = selectedChannels.size === channels.length ? Object.keys(tokens) : [...selectedChannels].filter(h => tokens[h]);
     if (handles.length === 0) return;
     const gen = genRef.current;
     loadingMoreRef.current = true;
@@ -337,7 +428,7 @@ export default function App() {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [selectedChannel, channelInfos]);
+  }, [selectedChannels, channelInfos]);
 
   useEffect(() => {
     if (hasKey) loadVideos();
@@ -366,13 +457,18 @@ export default function App() {
   const handleAddChannel = (handle: string) => {
     const updated = addChannel(handle);
     setChannels(updated);
+    setSelectedChannels((prev) => new Set([...prev, handle]));
     loadVideos();
   };
 
   const handleRemoveChannel = (handle: string) => {
     const updated = removeChannel(handle);
     setChannels(updated);
-    if (selectedChannel === handle) setSelectedChannel(null);
+    setSelectedChannels((prev) => {
+      const next = new Set(prev);
+      next.delete(handle);
+      return next;
+    });
     setVideos((prev) => prev.filter((v) => v.handle !== handle));
   };
 
@@ -380,9 +476,10 @@ export default function App() {
     return <ApiKeyPrompt onSave={() => setHasKey(true)} />;
   }
 
-  const filteredVideos = selectedChannel
-    ? videos.filter((v) => v.handle === selectedChannel)
-    : videos;
+  const allSelected = selectedChannels.size === channels.length;
+  const filteredVideos = allSelected
+    ? videos
+    : videos.filter((v) => selectedChannels.has(v.handle));
 
   return (
     <div className="flex h-screen bg-[#1c1714] text-[#c4b5a0]">
@@ -396,22 +493,41 @@ export default function App() {
       >
         <div className="flex items-center justify-between mb-3 px-1">
           <h1 className="text-lg font-bold text-[#d4c5b0]">Tubo</h1>
-          <button
-            onClick={loadVideos}
-            disabled={loading}
-            className="text-xs text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer disabled:opacity-50"
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="text-xs text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
+              title="Settings"
+            >
+              &#9881;
+            </button>
+            <button
+              onClick={loadVideos}
+              disabled={loading}
+              className="text-xs text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer disabled:opacity-50"
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
         </div>
 
         <ChannelPills
           channels={channels}
           channelInfos={channelInfos}
-          selectedChannel={selectedChannel}
-          onSelect={setSelectedChannel}
-          onAdd={handleAddChannel}
-          onRemove={handleRemoveChannel}
+          selectedChannels={selectedChannels}
+          onToggle={(handle) => {
+            setSelectedChannels((prev) => {
+              const next = new Set(prev);
+              if (next.has(handle)) {
+                next.delete(handle);
+              } else {
+                next.add(handle);
+              }
+              return next;
+            });
+          }}
+          onSelectAll={() => setSelectedChannels(new Set(channels))}
+          onOnly={(handle) => setSelectedChannels(new Set([handle]))}
         />
 
         {error && <p className="text-sm text-red-400 px-1">{error}</p>}
@@ -433,7 +549,7 @@ export default function App() {
           />
         ))}
 
-        {(selectedChannel ? !!pageTokensRef.current[selectedChannel] : Object.keys(pageTokensRef.current).length > 0) && (
+        {(allSelected ? Object.keys(pageTokensRef.current).length > 0 : [...selectedChannels].some(h => pageTokensRef.current[h])) && (
           <div ref={sentinelRef} className="py-4 text-center text-sm text-[#5a5044]">
             {loadingMore ? "Loading..." : ""}
           </div>
@@ -478,6 +594,16 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {settingsOpen && (
+        <SettingsPanel
+          channels={channels}
+          channelInfos={channelInfos}
+          onAdd={handleAddChannel}
+          onRemove={handleRemoveChannel}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   );
 }
