@@ -1,12 +1,13 @@
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 
-module.exports = {
+module.exports = (env, argv) => ({
   entry: "./src/main.tsx",
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
     clean: true,
+    publicPath: argv.mode === "production" ? "/tubo/" : "/",
   },
   resolve: {
     extensions: [".ts", ".tsx", ".js"],
@@ -33,5 +34,6 @@ module.exports = {
     port: 3000,
     hot: true,
     open: true,
+    historyApiFallback: true,
   },
-};
+});
