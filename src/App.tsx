@@ -5,8 +5,28 @@ import {
   setApiKey,
   resolveChannel,
   getLatestVideos,
+  getVideoById,
   Video,
 } from "./youtube";
+
+const BASE_PATH = window.location.pathname.startsWith("/tubo") ? "/tubo/" : "/";
+
+function parseUrl() {
+  const path = window.location.pathname.slice(BASE_PATH.length);
+  const videoId = path && path !== "/" ? path : null;
+  const params = new URLSearchParams(window.location.search);
+  const channelsParam = params.get("channels");
+  const channels = channelsParam ? channelsParam.split(",").filter(Boolean) : null;
+  return { videoId, channels };
+}
+
+function buildUrl(videoId: string | null, selectedChannels: Set<string>, allChannels: string[]) {
+  let path = BASE_PATH;
+  if (videoId) path += videoId;
+  const isAll = selectedChannels.size === allChannels.length || selectedChannels.size === 0;
+  const search = isAll ? "" : "?channels=" + [...selectedChannels].join(",");
+  return path + search;
+}
 
 interface ChannelInfo {
   handle: string;
@@ -298,6 +318,8 @@ function SettingsPanel({
   );
 }
 
+const initialUrl = parseUrl();
+
 export default function App() {
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [channels, setChannels] = useState<string[]>(getChannels);
@@ -309,7 +331,13 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
-  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(channels));
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(() => {
+    if (initialUrl.channels) {
+      const valid = initialUrl.channels.filter(c => getChannels().includes(c));
+      if (valid.length > 0) return new Set(valid);
+    }
+    return new Set(getChannels());
+  });
   const [watchedIds, setWatchedIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem("tubo_watched");
@@ -333,6 +361,7 @@ export default function App() {
   const loadMoreRef = useRef<(() => Promise<void>) | null>(null);
   const genRef = useRef(0);
   const loadingMoreRef = useRef(false);
+  const pendingVideoIdRef = useRef<string | null>(initialUrl.videoId);
 
   const loadVideos = useCallback(async () => {
     setLoading(true);
@@ -379,12 +408,31 @@ export default function App() {
       );
       pageTokensRef.current = tokens;
       setVideos(allVideos);
+
+      // Handle pending video permalink
+      const pendingId = pendingVideoIdRef.current;
+      if (pendingId) {
+        pendingVideoIdRef.current = null;
+        const found = allVideos.find(v => v.videoId === pendingId);
+        if (found) {
+          setSelectedVideo(found);
+          markWatched(found.videoId);
+        } else {
+          // Video not in channel list — fetch it directly
+          getVideoById(pendingId).then(v => {
+            if (v) {
+              setSelectedVideo(v);
+              markWatched(v.videoId);
+            }
+          });
+        }
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [markWatched]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current) return;
@@ -453,6 +501,14 @@ export default function App() {
     observer.observe(el);
     return () => observer.disconnect();
   });
+
+  // Sync URL with selected video and channel filter
+  useEffect(() => {
+    const url = buildUrl(selectedVideo?.videoId ?? null, selectedChannels, channels);
+    if (url !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, "", url);
+    }
+  }, [selectedVideo, selectedChannels, channels]);
 
   const handleAddChannel = (handle: string) => {
     const updated = addChannel(handle);
@@ -576,13 +632,14 @@ export default function App() {
                 &times;
               </button>
             </div>
-            <div className="flex-1 flex items-center justify-center p-4">
+            <div className="flex-1 flex items-center justify-center p-4 min-h-0">
               <iframe
                 key={selectedVideo.videoId}
                 src={`https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`}
                 allow="autoplay; encrypted-media"
                 allowFullScreen
-                className="w-full max-w-5xl aspect-video rounded-xl"
+                className="w-full h-full max-h-full rounded-xl"
+                style={{ aspectRatio: "16/9", maxWidth: "calc((100vh - 80px) * 16 / 9)" }}
               />
             </div>
           </>

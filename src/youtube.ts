@@ -83,3 +83,22 @@ export async function getLatestVideos(
   }));
   return { videos, nextPageToken: data.nextPageToken };
 }
+
+export async function getVideoById(videoId: string): Promise<Video | null> {
+  const data = await ytFetch("videos", {
+    id: videoId,
+    part: "snippet",
+  });
+  if (!data.items?.length) return null;
+  const item = data.items[0];
+  return {
+    videoId: item.id,
+    title: item.snippet.title,
+    thumbnail:
+      item.snippet.thumbnails.medium?.url ||
+      item.snippet.thumbnails.default?.url,
+    channelTitle: item.snippet.channelTitle,
+    publishedAt: item.snippet.publishedAt,
+    handle: "",
+  };
+}
