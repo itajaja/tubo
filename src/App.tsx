@@ -390,7 +390,7 @@ export default function App() {
   ).filter((v) => !filterShorts || v.duration === 0 || v.duration > 180);
 
   return (
-    <div className="flex h-screen bg-[#1c1714] text-[#c4b5a0]">
+    <div className="flex h-dvh bg-[#1c1714] text-[#c4b5a0]">
       {/* Backdrop */}
       {selectedVideo && (
         <div
@@ -491,7 +491,7 @@ export default function App() {
       </div>
 
       {/* Player / Splash */}
-      <div className={`flex-1 min-w-0 flex flex-col bg-[#141110] ${selectedVideo ? "" : "hidden md:flex"}`}>
+      <div className={`flex-1 min-w-0 flex flex-col bg-[#141110] overflow-hidden ${selectedVideo ? "" : "hidden md:flex"}`}>
         {selectedVideo ? (
           <>
             <div className="flex items-center justify-between p-3 border-b border-[#302a22]">
