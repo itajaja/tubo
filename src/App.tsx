@@ -543,8 +543,8 @@ export default function App() {
       <div
         className={`${
           selectedVideo
-            ? "w-[420px] min-w-[420px]"
-            : "w-[420px]"
+            ? "hidden md:block w-full md:w-[420px] md:min-w-[420px]"
+            : "w-full md:w-[420px]"
         } h-full overflow-y-auto border-r border-[#302a22] p-3 space-y-1`}
       >
         <div className="flex items-center justify-between mb-3 px-1">
@@ -613,21 +613,29 @@ export default function App() {
       </div>
 
       {/* Player / Splash */}
-      <div className="flex-1 flex flex-col bg-[#141110]">
+      <div className={`flex-1 flex flex-col bg-[#141110] ${selectedVideo ? "" : "hidden md:flex"}`}>
         {selectedVideo ? (
           <>
             <div className="flex items-center justify-between p-3 border-b border-[#302a22]">
-              <div className="min-w-0">
-                <p className="font-medium truncate text-[#d4c5b0]">
-                  {selectedVideo.title}
-                </p>
-                <p className="text-xs text-[#8a7e6e]">
-                  {selectedVideo.channelTitle}
-                </p>
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  onClick={() => setSelectedVideo(null)}
+                  className="md:hidden text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
+                >
+                  &#8592;
+                </button>
+                <div className="min-w-0">
+                  <p className="font-medium truncate text-[#d4c5b0]">
+                    {selectedVideo.title}
+                  </p>
+                  <p className="text-xs text-[#8a7e6e]">
+                    {selectedVideo.channelTitle}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedVideo(null)}
-                className="ml-4 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
+                className="hidden md:block ml-4 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
               >
                 &times;
               </button>
