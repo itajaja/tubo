@@ -556,17 +556,15 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   };
 
   const handlePip = useCallback(async () => {
-    const playerContainer = document.getElementById("tubo-player");
-    if (!playerContainer || !("documentPictureInPicture" in window)) return;
+    if (!("documentPictureInPicture" in window) || !selectedVideo) return;
     const pip = await (window as any).documentPictureInPicture.requestWindow({ width: 640, height: 360 });
     pip.document.head.innerHTML = `<style>body{margin:0;background:#141110;display:flex;align-items:center;justify-content:center;height:100vh}iframe{width:100%;height:100%;border:none}</style>`;
-    const iframe = playerContainer.querySelector("iframe");
-    if (iframe) pip.document.body.appendChild(iframe);
-    pip.addEventListener("pagehide", () => {
-      const returned = pip.document.querySelector("iframe");
-      if (returned && playerContainer) playerContainer.appendChild(returned);
-    });
-  }, []);
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`;
+    iframe.allow = "autoplay; encrypted-media";
+    iframe.allowFullscreen = true;
+    pip.document.body.appendChild(iframe);
+  }, [selectedVideo]);
 
   const hasPip = "documentPictureInPicture" in window;
   const allSelected = selectedChannels.size === channels.length;
