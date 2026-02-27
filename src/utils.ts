@@ -1,31 +1,7 @@
-export const BASE_PATH = window.location.pathname.startsWith("/tubo") ? "/tubo/" : "/";
-
 export interface ChannelInfo {
   handle: string;
   title: string;
   uploadsPlaylistId: string;
-}
-
-export function parseUrl() {
-  const path = window.location.pathname.slice(BASE_PATH.length);
-  const videoId = path && path !== "/" ? path : null;
-  const params = new URLSearchParams(window.location.search);
-  const channelsParam = params.get("channels");
-  const channels = channelsParam ? channelsParam.split(",").filter(Boolean) : null;
-  const profileParam = params.get("profile");
-  const profileIndex = profileParam !== null ? parseInt(profileParam, 10) : null;
-  return { videoId, channels, profileIndex };
-}
-
-export function buildUrl(videoId: string | null, selectedChannels: Set<string>, allChannels: string[], profileIndex: number) {
-  let path = BASE_PATH;
-  if (videoId) path += videoId;
-  const params = new URLSearchParams();
-  const isAll = selectedChannels.size === allChannels.length || selectedChannels.size === 0;
-  if (!isAll) params.set("channels", [...selectedChannels].join(","));
-  if (profileIndex > 0) params.set("profile", String(profileIndex));
-  const search = params.toString();
-  return path + (search ? "?" + search : "");
 }
 
 export function formatDuration(seconds: number): string {

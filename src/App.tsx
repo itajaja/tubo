@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getProfiles, addChannelToProfile, removeChannelFromProfile, addProfile, deleteProfile, updateProfile, Profile } from "./profiles";
 import {
   getApiKey,
@@ -7,18 +7,18 @@ import {
   getVideoById,
   VideoWithDetails,
 } from "./youtube";
-import { parseUrl, buildUrl, ChannelInfo } from "./utils";
+import { ChannelInfo } from "./utils";
+import { initialUrlState, useUrlSync } from "./useUrlState";
 import ApiKeyPrompt from "./ApiKeyPrompt";
 import VideoCard from "./VideoCard";
 import ChannelPills from "./ChannelPills";
 import ProfileSwitcher from "./ProfileSwitcher";
 import SettingsPanel from "./SettingsPanel";
 
-const initialUrl = parseUrl();
 
 function getInitialProfile(): { profiles: Profile[]; active: Profile } {
   const profiles = getProfiles();
-  const idx = initialUrl.profileIndex;
+  const idx = initialUrlState.profileIndex;
   if (idx !== null && !isNaN(idx) && idx >= 0 && idx < profiles.length) {
     return { profiles, active: profiles[idx] };
   }
@@ -41,8 +41,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoWithDetails | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(() => {
-    if (initialUrl.channels) {
-      const valid = initialUrl.channels.filter(c => activeProfile.channels.includes(c));
+    if (initialUrlState.channels) {
+      const valid = initialUrlState.channels.filter(c => activeProfile.channels.includes(c));
       if (valid.length > 0) return new Set(valid);
     }
     return new Set(activeProfile.channels);
@@ -147,7 +147,7 @@ export default function App() {
   const loadMoreRef = useRef<(() => Promise<void>) | null>(null);
   const genRef = useRef(0);
   const loadingMoreRef = useRef(false);
-  const pendingVideoIdRef = useRef<string | null>(initialUrl.videoId);
+  const pendingVideoIdRef = useRef<string | null>(initialUrlState.videoId);
 
   const loadVideos = useCallback(async () => {
     setLoading(true);
@@ -288,14 +288,48 @@ export default function App() {
     return () => observer.disconnect();
   });
 
-  // Sync URL with selected video and channel filter
-  useEffect(() => {
-    const profileIdx = profiles.findIndex((p) => p.id === activeProfile.id);
-    const url = buildUrl(selectedVideo?.videoId ?? null, selectedChannels, channels, profileIdx >= 0 ? profileIdx : 0);
-    if (url !== window.location.pathname + window.location.search) {
-      window.history.replaceState(null, "", url);
-    }
-  }, [selectedVideo, selectedChannels, channels, activeProfile, profiles]);
+  const profileIndex = useMemo(() => {
+    const idx = profiles.findIndex((p) => p.id === activeProfile.id);
+    return idx >= 0 ? idx : 0;
+  }, [profiles, activeProfile]);
+
+  useUrlSync(
+    selectedVideo?.videoId ?? null,
+    selectedChannels,
+    channels,
+    profileIndex,
+    (parsed) => {
+      // Restore video
+      if (parsed.videoId) {
+        const found = videos.find(v => v.videoId === parsed.videoId);
+        if (found) {
+          setSelectedVideo(found);
+        } else {
+          getVideoById(parsed.videoId).then(v => setSelectedVideo(v));
+        }
+      } else {
+        setSelectedVideo(null);
+      }
+      // Restore profile
+      const idx = parsed.profileIndex;
+      if (idx !== null && !isNaN(idx) && idx >= 0 && idx < profiles.length) {
+        const profile = profiles[idx];
+        if (profile.id !== activeProfile.id) {
+          setActiveProfile(profile);
+          setChannels(profile.channels);
+          setSelectedChannels(new Set(profile.channels));
+          setVideos([]);
+          setChannelInfos(new Map());
+        }
+      } else if (activeProfile.id !== profiles[0].id) {
+        setActiveProfile(profiles[0]);
+        setChannels(profiles[0].channels);
+        setSelectedChannels(new Set(profiles[0].channels));
+        setVideos([]);
+        setChannelInfos(new Map());
+      }
+    },
+  );
 
   const handleAddChannel = (handle: string) => {
     const updatedProfiles = addChannelToProfile(activeProfile.id, handle);
@@ -328,7 +362,6 @@ export default function App() {
     setSelectedChannels(new Set(profile.channels));
     setVideos([]);
     setChannelInfos(new Map());
-    setSelectedVideo(null);
   };
 
   const handleAddProfile = (name: string, emoji: string) => {
