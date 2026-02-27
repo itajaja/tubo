@@ -6,7 +6,9 @@ import {
   resolveChannel,
   getLatestVideos,
   getVideoById,
+  searchChannels,
   Video,
+  ChannelSearchResult,
 } from "./youtube";
 
 const BASE_PATH = window.location.pathname.startsWith("/tubo") ? "/tubo/" : "/";
@@ -208,9 +210,39 @@ function SettingsPanel({
   onClose: () => void;
 }) {
   const [newChannel, setNewChannel] = useState("");
+  const [suggestions, setSuggestions] = useState<ChannelSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const currentKey = getApiKey() || "";
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = newChannel.trim();
+    if (q.length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
+    setSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchChannels(q);
+        setSuggestions(results.filter(r => r.handle && !channels.includes(r.handle)));
+        setShowSuggestions(true);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [newChannel, channels]);
+
+  const selectSuggestion = (result: ChannelSearchResult) => {
+    onAdd(result.handle);
+    setNewChannel("");
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -248,29 +280,35 @@ function SettingsPanel({
               );
             })}
           </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (newChannel.trim()) {
-                onAdd(newChannel.trim());
-                setNewChannel("");
-              }
-            }}
-            className="flex gap-2"
-          >
+          <div className="relative">
             <input
               value={newChannel}
               onChange={(e) => setNewChannel(e.target.value)}
-              placeholder="@handle"
-              className="flex-1 px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
+              onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+              placeholder="Search channels..."
+              className="w-full px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
             />
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg bg-[#7a6a50] hover:bg-[#8a7a60] text-[#1c1714] font-medium cursor-pointer text-sm"
-            >
-              Add
-            </button>
-          </form>
+            {searching && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#5a5044]">...</span>
+            )}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-10 left-0 right-0 mt-1 rounded-lg bg-[#1c1714] border border-[#3a332a] overflow-hidden shadow-lg">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => selectSuggestion(s)}
+                    className="flex items-center gap-3 w-full px-3 py-2 text-left hover:bg-[#302a22] cursor-pointer transition-colors"
+                  >
+                    <img src={s.thumbnail} alt="" className="w-8 h-8 rounded-full" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-[#c4b5a0] truncate">{s.title}</p>
+                      <p className="text-xs text-[#5a5044]">@{s.handle}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* API Key section */}

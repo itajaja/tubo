@@ -102,3 +102,33 @@ export async function getVideoById(videoId: string): Promise<Video | null> {
     handle: "",
   };
 }
+
+export interface ChannelSearchResult {
+  id: string;
+  title: string;
+  handle: string;
+  thumbnail: string;
+}
+
+export async function searchChannels(query: string): Promise<ChannelSearchResult[]> {
+  if (!query.trim()) return [];
+  const data = await ytFetch("search", {
+    q: query,
+    type: "channel",
+    part: "snippet",
+    maxResults: "5",
+  });
+  if (!data.items?.length) return [];
+  // Fetch full channel details to get customUrl (handle)
+  const ids = data.items.map((item: any) => item.snippet.channelId).join(",");
+  const details = await ytFetch("channels", {
+    id: ids,
+    part: "snippet",
+  });
+  return (details.items || []).map((ch: any) => ({
+    id: ch.id,
+    title: ch.snippet.title,
+    handle: ch.snippet.customUrl?.replace(/^@/, "") || "",
+    thumbnail: ch.snippet.thumbnails.default.url,
+  }));
+}
