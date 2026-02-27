@@ -1,40 +1,161 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { getProfiles, addChannelToProfile, removeChannelFromProfile, addProfile, deleteProfile, updateProfile, Profile } from "./profiles";
+import { Profile } from "./profiles";
 import {
-  getApiKey,
   resolveChannel,
   getLatestVideos,
   getVideoById,
+  setYouTubeToken,
   VideoWithDetails,
 } from "./youtube";
 import { ChannelInfo } from "./utils";
 import { initialUrlState, useUrlSync } from "./useUrlState";
-import ApiKeyPrompt from "./ApiKeyPrompt";
+import {
+  signIn,
+  doSignOut,
+  onAuthChange,
+  loadUserConfig,
+  saveUserConfig,
+  UserConfig,
+  refreshAccessToken,
+  getAccessToken,
+} from "./firebase";
+import { User } from "firebase/auth";
 import VideoCard from "./VideoCard";
 import ChannelPills from "./ChannelPills";
 import ProfileSwitcher from "./ProfileSwitcher";
 import SettingsPanel from "./SettingsPanel";
 
+function SignInScreen() {
+  const [signingIn, setSigningIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-function getInitialProfile(): { profiles: Profile[]; active: Profile } {
-  const profiles = getProfiles();
-  const idx = initialUrlState.profileIndex;
-  if (idx !== null && !isNaN(idx) && idx >= 0 && idx < profiles.length) {
-    return { profiles, active: profiles[idx] };
-  }
-  return { profiles, active: profiles[0] };
+  const handleSignIn = async () => {
+    setSigningIn(true);
+    setError(null);
+    try {
+      await signIn();
+    } catch (err: any) {
+      setError(err.message || "Sign-in failed");
+      setSigningIn(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center h-screen bg-[#1c1714] text-[#c4b5a0]">
+      <div className="max-w-md w-full p-5 md:p-8 space-y-4 bg-[#252019] rounded-2xl border border-[#3a332a] mx-4 text-center">
+        <h1 className="text-2xl font-bold text-[#d4c5b0]">Tubo</h1>
+        <p className="text-sm text-[#8a7e6e]">
+          Distraction-free YouTube. Sign in with Google to get started.
+        </p>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <button
+          onClick={handleSignIn}
+          disabled={signingIn}
+          className="w-full py-2 rounded-lg bg-[#7a6a50] hover:bg-[#8a7a60] text-[#1c1714] font-medium cursor-pointer disabled:opacity-50"
+        >
+          {signingIn ? "Signing in..." : "Sign in with Google"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
-const initialProfile = getInitialProfile();
-
 export default function App() {
-  const [hasKey, setHasKey] = useState(!!getApiKey());
-  const [profiles, setProfiles] = useState<Profile[]>(initialProfile.profiles);
-  const [activeProfile, setActiveProfile] = useState<Profile>(initialProfile.active);
-  const [channels, setChannels] = useState<string[]>(() => activeProfile.channels);
-  const [channelInfos, setChannelInfos] = useState<Map<string, ChannelInfo>>(
-    new Map()
+  const [user, setUser] = useState<User | null | undefined>(undefined); // undefined = loading
+  const [config, setConfig] = useState<UserConfig | null>(null);
+  const configRef = useRef<UserConfig | null>(null);
+
+  // Auth listener
+  useEffect(() => {
+    return onAuthChange(async (u) => {
+      setUser(u);
+      if (u) {
+        // Ensure we have a YouTube access token
+        if (!getAccessToken()) {
+          try {
+            await refreshAccessToken();
+          } catch {
+            // Re-auth failed — user will need to sign in again
+            setUser(null);
+            return;
+          }
+        } else {
+          setYouTubeToken(getAccessToken());
+        }
+        try {
+          const cfg = await loadUserConfig(u.uid);
+          configRef.current = cfg;
+          setConfig(cfg);
+        } catch (err) {
+          console.error("Failed to load config:", err);
+        }
+      } else {
+        setYouTubeToken(null);
+        configRef.current = null;
+        setConfig(null);
+      }
+    });
+  }, []);
+
+  const updateConfig = useCallback((updater: (prev: UserConfig) => UserConfig) => {
+    if (!user || !configRef.current) return;
+    const next = updater(configRef.current);
+    configRef.current = next;
+    setConfig(next);
+    saveUserConfig(user.uid, next);
+  }, [user]);
+
+  // Loading state
+  if (user === undefined) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#1c1714] text-[#5a5044]">
+        Loading...
+      </div>
+    );
+  }
+
+  // Not signed in
+  if (!user || !config) {
+    return <SignInScreen />;
+  }
+
+  return (
+    <MainApp
+      user={user}
+      config={config}
+      updateConfig={updateConfig}
+    />
   );
+}
+
+interface MainAppProps {
+  user: User;
+  config: UserConfig;
+  updateConfig: (updater: (prev: UserConfig) => UserConfig) => void;
+}
+
+function MainApp({ user, config, updateConfig }: MainAppProps) {
+  const profiles = config.profiles;
+  const watchedIds = useMemo(() => new Set(config.watchedIds), [config.watchedIds]);
+  const filterShorts = config.filterShorts;
+
+  const activeProfile = useMemo(() => {
+    const idx = initialUrlState.profileIndex;
+    if (idx !== null && !isNaN(idx) && idx >= 0 && idx < profiles.length) {
+      return profiles[idx];
+    }
+    return profiles[0];
+  }, []); // only compute once on mount
+
+  const [activeProfileId, setActiveProfileId] = useState(activeProfile.id);
+  const currentProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId) || profiles[0],
+    [profiles, activeProfileId]
+  );
+
+  const channels = currentProfile.channels;
+
+  const [channelInfos, setChannelInfos] = useState<Map<string, ChannelInfo>>(new Map());
   const [videos, setVideos] = useState<VideoWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -42,31 +163,51 @@ export default function App() {
   const [selectedVideo, setSelectedVideo] = useState<VideoWithDetails | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(() => {
     if (initialUrlState.channels) {
-      const valid = initialUrlState.channels.filter(c => activeProfile.channels.includes(c));
+      const valid = initialUrlState.channels.filter(c => channels.includes(c));
       if (valid.length > 0) return new Set(valid);
     }
-    return new Set(activeProfile.channels);
-  });
-  const [watchedIds, setWatchedIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem("tubo_watched");
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
+    return new Set(channels);
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [filterShorts, setFilterShorts] = useState(() => localStorage.getItem("tubo_filter_shorts") !== "false");
   const drawerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
   const [listScrolled, setListScrolled] = useState(false);
 
+  const markWatched = useCallback((videoId: string) => {
+    updateConfig((prev) => {
+      if (prev.watchedIds.includes(videoId)) return prev;
+      const next = [videoId, ...prev.watchedIds].slice(0, 1000);
+      return { ...prev, watchedIds: next };
+    });
+  }, [updateConfig]);
+
+  const pageTokensRef = useRef<Record<string, string>>({});
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<(() => Promise<void>) | null>(null);
+  const genRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const pendingVideoIdRef = useRef<string | null>(initialUrlState.videoId);
+
+  // Wrap YouTube API calls with token refresh on 401
+  const withRetry = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err: any) {
+      if (err?.status === 401) {
+        const newToken = await refreshAccessToken();
+        setYouTubeToken(newToken);
+        return await fn();
+      }
+      throw err;
+    }
+  }, []);
+
   // Edge swipe to open drawer
   useEffect(() => {
     const onTouchStart = (e: TouchEvent) => {
-      if (window.innerWidth >= 768) return; // md breakpoint
+      if (window.innerWidth >= 768) return;
       const touch = e.touches[0];
       if (touch.clientX < 20) {
         dragRef.current = { startX: touch.clientX, startY: touch.clientY, dragging: false, offset: 0, decided: false };
@@ -74,7 +215,7 @@ export default function App() {
     };
     const onTouchMove = (e: TouchEvent) => {
       const drag = dragRef.current;
-      if (!drag || drag.dragging) return; // handled by drawer's own handler once open
+      if (!drag || drag.dragging) return;
       const touch = e.touches[0];
       const dx = touch.clientX - drag.startX;
       const dy = touch.clientY - drag.startY;
@@ -99,7 +240,7 @@ export default function App() {
     };
   }, []);
 
-  // Drawer drag-to-close gesture handlers
+  // Drawer drag-to-close
   const onDrawerTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
     dragRef.current = { startX: touch.clientX, startY: touch.clientY, dragging: false, offset: 0, decided: false };
@@ -134,21 +275,6 @@ export default function App() {
     setDragOffset(null);
   }, []);
 
-  const markWatched = useCallback((videoId: string) => {
-    setWatchedIds((prev) => {
-      const next = new Set(prev);
-      next.add(videoId);
-      localStorage.setItem("tubo_watched", JSON.stringify([...next]));
-      return next;
-    });
-  }, []);
-  const pageTokensRef = useRef<Record<string, string>>({});
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const loadMoreRef = useRef<(() => Promise<void>) | null>(null);
-  const genRef = useRef(0);
-  const loadingMoreRef = useRef(false);
-  const pendingVideoIdRef = useRef<string | null>(initialUrlState.videoId);
-
   const loadVideos = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -157,14 +283,12 @@ export default function App() {
     try {
       const channelResults = await Promise.allSettled(
         currentChannels.map(async (handle) => {
-          const ch = await resolveChannel(handle);
+          const ch = await withRetry(() => resolveChannel(handle));
           return ch ? { handle, ...ch } : null;
         })
       );
       const resolved = channelResults
-        .filter(
-          (r) => r.status === "fulfilled" && r.value != null
-        )
+        .filter((r) => r.status === "fulfilled" && r.value != null)
         .map((r) => (r as PromiseFulfilledResult<any>).value as ChannelInfo);
 
       const infoMap = new Map<string, ChannelInfo>();
@@ -174,7 +298,7 @@ export default function App() {
       setChannelInfos(infoMap);
 
       const videoResults = await Promise.allSettled(
-        resolved.map((ch) => getLatestVideos(ch.uploadsPlaylistId, ch.handle))
+        resolved.map((ch) => withRetry(() => getLatestVideos(ch.uploadsPlaylistId, ch.handle)))
       );
       const allVideos: VideoWithDetails[] = [];
       const tokens: Record<string, string> = {};
@@ -189,13 +313,11 @@ export default function App() {
 
       allVideos.sort(
         (a, b) =>
-          new Date(b.publishedAt).getTime() -
-          new Date(a.publishedAt).getTime()
+          new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       );
       pageTokensRef.current = tokens;
       setVideos(allVideos);
 
-      // Handle pending video permalink
       const pendingId = pendingVideoIdRef.current;
       if (pendingId) {
         pendingVideoIdRef.current = null;
@@ -204,8 +326,7 @@ export default function App() {
           setSelectedVideo(found);
           markWatched(found.videoId);
         } else {
-          // Video not in channel list — fetch it directly
-          getVideoById(pendingId).then(v => {
+          withRetry(() => getVideoById(pendingId)).then(v => {
             if (v) {
               setSelectedVideo(v);
               markWatched(v.videoId);
@@ -218,7 +339,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [markWatched, channels]);
+  }, [markWatched, channels, withRetry]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current) return;
@@ -231,7 +352,7 @@ export default function App() {
     try {
       const infos = handles.map(h => channelInfos.get(h)).filter(Boolean) as ChannelInfo[];
       const results = await Promise.allSettled(
-        infos.map((info) => getLatestVideos(info.uploadsPlaylistId, info.handle, 10, tokens[info.handle]))
+        infos.map((info) => withRetry(() => getLatestVideos(info.uploadsPlaylistId, info.handle, 10, tokens[info.handle])))
       );
       if (gen !== genRef.current) return;
       const newVideos: VideoWithDetails[] = [];
@@ -253,8 +374,7 @@ export default function App() {
         const combined = [...prev, ...deduped];
         combined.sort(
           (a, b) =>
-            new Date(b.publishedAt).getTime() -
-            new Date(a.publishedAt).getTime()
+            new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
         );
         return combined;
       });
@@ -262,11 +382,11 @@ export default function App() {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [selectedChannels, channelInfos]);
+  }, [selectedChannels, channelInfos, channels, withRetry]);
 
   useEffect(() => {
-    if (hasKey) loadVideos();
-  }, [hasKey, loadVideos]);
+    loadVideos();
+  }, [loadVideos]);
 
   useEffect(() => {
     genRef.current++;
@@ -289,9 +409,9 @@ export default function App() {
   });
 
   const profileIndex = useMemo(() => {
-    const idx = profiles.findIndex((p) => p.id === activeProfile.id);
+    const idx = profiles.findIndex((p) => p.id === activeProfileId);
     return idx >= 0 ? idx : 0;
-  }, [profiles, activeProfile]);
+  }, [profiles, activeProfileId]);
 
   useUrlSync(
     selectedVideo?.videoId ?? null,
@@ -299,31 +419,27 @@ export default function App() {
     channels,
     profileIndex,
     (parsed) => {
-      // Restore video
       if (parsed.videoId) {
         const found = videos.find(v => v.videoId === parsed.videoId);
         if (found) {
           setSelectedVideo(found);
         } else {
-          getVideoById(parsed.videoId).then(v => setSelectedVideo(v));
+          withRetry(() => getVideoById(parsed.videoId!)).then(v => setSelectedVideo(v));
         }
       } else {
         setSelectedVideo(null);
       }
-      // Restore profile
       const idx = parsed.profileIndex;
       if (idx !== null && !isNaN(idx) && idx >= 0 && idx < profiles.length) {
         const profile = profiles[idx];
-        if (profile.id !== activeProfile.id) {
-          setActiveProfile(profile);
-          setChannels(profile.channels);
+        if (profile.id !== activeProfileId) {
+          setActiveProfileId(profile.id);
           setSelectedChannels(new Set(profile.channels));
           setVideos([]);
           setChannelInfos(new Map());
         }
-      } else if (activeProfile.id !== profiles[0].id) {
-        setActiveProfile(profiles[0]);
-        setChannels(profiles[0].channels);
+      } else if (activeProfileId !== profiles[0].id) {
+        setActiveProfileId(profiles[0].id);
         setSelectedChannels(new Set(profiles[0].channels));
         setVideos([]);
         setChannelInfos(new Map());
@@ -332,21 +448,26 @@ export default function App() {
   );
 
   const handleAddChannel = (handle: string) => {
-    const updatedProfiles = addChannelToProfile(activeProfile.id, handle);
-    const updatedProfile = updatedProfiles.find((p) => p.id === activeProfile.id) || updatedProfiles[0];
-    setProfiles(updatedProfiles);
-    setActiveProfile(updatedProfile);
-    setChannels(updatedProfile.channels);
+    updateConfig((prev) => ({
+      ...prev,
+      profiles: prev.profiles.map((p) =>
+        p.id === activeProfileId && !p.channels.includes(handle)
+          ? { ...p, channels: [...p.channels, handle] }
+          : p
+      ),
+    }));
     setSelectedChannels((prev) => new Set([...prev, handle]));
-    loadVideos();
   };
 
   const handleRemoveChannel = (handle: string) => {
-    const updatedProfiles = removeChannelFromProfile(activeProfile.id, handle);
-    const updatedProfile = updatedProfiles.find((p) => p.id === activeProfile.id) || updatedProfiles[0];
-    setProfiles(updatedProfiles);
-    setActiveProfile(updatedProfile);
-    setChannels(updatedProfile.channels);
+    updateConfig((prev) => ({
+      ...prev,
+      profiles: prev.profiles.map((p) =>
+        p.id === activeProfileId
+          ? { ...p, channels: p.channels.filter((c) => c !== handle) }
+          : p
+      ),
+    }));
     setSelectedChannels((prev) => {
       const next = new Set(prev);
       next.delete(handle);
@@ -356,32 +477,45 @@ export default function App() {
   };
 
   const switchProfile = (id: string) => {
+    setActiveProfileId(id);
     const profile = profiles.find((p) => p.id === id) || profiles[0];
-    setActiveProfile(profile);
-    setChannels(profile.channels);
     setSelectedChannels(new Set(profile.channels));
     setVideos([]);
     setChannelInfos(new Map());
   };
 
   const handleAddProfile = (name: string, emoji: string) => {
-    const updated = addProfile(name, emoji);
-    setProfiles(updated);
-    const newProfile = updated[updated.length - 1];
-    switchProfile(newProfile.id);
+    const newProfile: Profile = {
+      id: crypto.randomUUID(),
+      name,
+      emoji,
+      channels: [],
+    };
+    updateConfig((prev) => ({
+      ...prev,
+      profiles: [...prev.profiles, newProfile],
+    }));
+    setActiveProfileId(newProfile.id);
+    setSelectedChannels(new Set());
+    setVideos([]);
+    setChannelInfos(new Map());
   };
 
   const handleDeleteProfile = (id: string) => {
-    const updated = deleteProfile(id);
-    setProfiles(updated);
-    if (activeProfile.id === id) {
-      switchProfile(updated[0].id);
+    if (profiles.length <= 1) return;
+    updateConfig((prev) => ({
+      ...prev,
+      profiles: prev.profiles.filter((p) => p.id !== id),
+    }));
+    if (activeProfileId === id) {
+      const remaining = profiles.filter((p) => p.id !== id);
+      switchProfile(remaining[0].id);
     }
   };
 
-  if (!hasKey) {
-    return <ApiKeyPrompt onSave={() => setHasKey(true)} />;
-  }
+  const handleSignOut = async () => {
+    await doSignOut();
+  };
 
   const allSelected = selectedChannels.size === channels.length;
   const filteredVideos = (allSelected
@@ -416,7 +550,7 @@ export default function App() {
             <h1 className="text-lg font-bold text-[#d4c5b0]"><button onClick={() => { setSelectedVideo(null); setSidebarOpen(false); }} className="cursor-pointer hover:text-[#e8d9c4]">Tubo</button></h1>
             <ProfileSwitcher
               profiles={profiles}
-              activeProfile={activeProfile}
+              activeProfile={currentProfile}
               onSwitch={switchProfile}
               onAdd={handleAddProfile}
               onDelete={handleDeleteProfile}
@@ -543,22 +677,24 @@ export default function App() {
         <SettingsPanel
           channels={channels}
           channelInfos={channelInfos}
-          activeProfile={activeProfile}
+          activeProfile={currentProfile}
           filterShorts={filterShorts}
+          userName={user.displayName || ""}
+          userPhoto={user.photoURL || ""}
           onAdd={handleAddChannel}
           onRemove={handleRemoveChannel}
           onUpdateProfile={(updates) => {
-            const updated = updateProfile(activeProfile.id, updates);
-            setProfiles(updated);
-            setActiveProfile(updated.find((p) => p.id === activeProfile.id) || updated[0]);
+            updateConfig((prev) => ({
+              ...prev,
+              profiles: prev.profiles.map((p) =>
+                p.id === activeProfileId ? { ...p, ...updates } : p
+              ),
+            }));
           }}
           onToggleFilterShorts={() => {
-            setFilterShorts((prev) => {
-              const next = !prev;
-              localStorage.setItem("tubo_filter_shorts", String(next));
-              return next;
-            });
+            updateConfig((prev) => ({ ...prev, filterShorts: !prev.filterShorts }));
           }}
+          onSignOut={handleSignOut}
           onClose={() => setSettingsOpen(false)}
         />
       )}

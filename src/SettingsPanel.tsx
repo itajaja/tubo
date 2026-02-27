@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Profile } from "./profiles";
-import { getApiKey, setApiKey, searchChannels, ChannelSearchResult } from "./youtube";
+import { searchChannels, ChannelSearchResult } from "./youtube";
 import { ChannelInfo } from "./utils";
 import EmojiPickerButton from "./EmojiPickerButton";
 
@@ -9,20 +9,26 @@ export default function SettingsPanel({
   channelInfos,
   activeProfile,
   filterShorts,
+  userName,
+  userPhoto,
   onAdd,
   onRemove,
   onUpdateProfile,
   onToggleFilterShorts,
+  onSignOut,
   onClose,
 }: {
   channels: string[];
   channelInfos: Map<string, ChannelInfo>;
   activeProfile: Profile;
   filterShorts: boolean;
+  userName: string;
+  userPhoto: string;
   onAdd: (handle: string) => void;
   onRemove: (handle: string) => void;
   onUpdateProfile: (updates: { name?: string; emoji?: string }) => void;
   onToggleFilterShorts: () => void;
+  onSignOut: () => void;
   onClose: () => void;
 }) {
   const [newChannel, setNewChannel] = useState("");
@@ -30,9 +36,6 @@ export default function SettingsPanel({
   const [searching, setSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const currentKey = getApiKey() || "";
   const [profileName, setProfileName] = useState(activeProfile.name);
   const [profileEmoji, setProfileEmoji] = useState(activeProfile.emoji);
 
@@ -76,6 +79,23 @@ export default function SettingsPanel({
           >
             &times;
           </button>
+        </div>
+
+        {/* Account section */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#8a7e6e] uppercase tracking-wider">Account</h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {userPhoto && <img src={userPhoto} alt="" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />}
+              <span className="text-sm text-[#c4b5a0]">{userName}</span>
+            </div>
+            <button
+              onClick={onSignOut}
+              className="text-sm text-[#5a5044] hover:text-red-400 cursor-pointer"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
 
         {/* Profile section */}
@@ -158,47 +178,6 @@ export default function SettingsPanel({
               <div className={`w-4 h-4 rounded-full bg-[#d4c5b0] transition-transform mx-0.5 ${filterShorts ? "translate-x-5" : "translate-x-0"}`} />
             </button>
           </label>
-        </div>
-
-        {/* API Key section */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-[#8a7e6e] uppercase tracking-wider">API Key</h3>
-          <p className="text-xs text-[#5a5044]">
-            Current: {currentKey ? (showApiKey ? currentKey : currentKey.slice(0, 6) + "\u2026" + currentKey.slice(-4)) : "Not set"}
-            {currentKey && (
-              <button
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="ml-2 underline hover:text-[#8a7e6e] cursor-pointer"
-              >
-                {showApiKey ? "hide" : "show"}
-              </button>
-            )}
-          </p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (apiKeyInput.trim()) {
-                setApiKey(apiKeyInput.trim());
-                setApiKeyInput("");
-                onClose();
-                window.location.reload();
-              }
-            }}
-            className="flex gap-2"
-          >
-            <input
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="New API key..."
-              className="flex-1 px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg bg-[#7a6a50] hover:bg-[#8a7a60] text-[#1c1714] font-medium cursor-pointer text-sm"
-            >
-              Save
-            </button>
-          </form>
         </div>
       </div>
     </div>

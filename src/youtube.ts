@@ -1,11 +1,7 @@
-const API_KEY_STORAGE_KEY = "tubo_youtube_api_key";
+let accessToken: string | null = null;
 
-export function getApiKey(): string | null {
-  return localStorage.getItem(API_KEY_STORAGE_KEY);
-}
-
-export function setApiKey(key: string) {
-  localStorage.setItem(API_KEY_STORAGE_KEY, key);
+export function setYouTubeToken(token: string | null) {
+  accessToken = token;
 }
 
 interface Channel {
@@ -29,16 +25,19 @@ export interface VideoWithDetails extends Video {
 }
 
 async function ytFetch(endpoint: string, params: Record<string, string>) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("No API key set");
+  if (!accessToken) throw new Error("Not authenticated");
   const url = new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`);
-  url.searchParams.set("key", apiKey);
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
+    if (res.status === 401) {
+      throw Object.assign(new Error("Token expired"), { status: 401 });
+    }
     throw new Error(
       body?.error?.message || `YouTube API error: ${res.status}`
     );
