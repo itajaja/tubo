@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getChannels, addChannel, removeChannel } from "./channels";
+import { createPortal } from "react-dom";
+import data from "@emoji-mart/data";
+import Picker from "@emoji-mart/react";
+import { getChannels, addChannel, removeChannel, getProfiles, getActiveProfile, setActiveProfileId, addProfile, deleteProfile, updateProfile, Profile } from "./profiles";
 import {
   getApiKey,
   setApiKey,
@@ -196,17 +199,189 @@ function ChannelPills({
   );
 }
 
+function EmojiPickerButton({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (emoji: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        pickerRef.current && !pickerRef.current.contains(e.target as Node)
+      ) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left });
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-10 h-9 rounded-lg bg-[#0e0c0a] border border-[#3a332a] text-center text-sm cursor-pointer hover:border-[#a08860] transition-colors"
+      >
+        {value || "\u{1F4C1}"}
+      </button>
+      {open && pos && createPortal(
+        <div ref={pickerRef} data-emoji-picker="true" style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}>
+          <Picker
+            data={data}
+            onEmojiSelect={(emoji: any) => { onChange(emoji.native); setOpen(false); }}
+            theme="dark"
+            previewPosition="none"
+            skinTonePosition="none"
+            perLine={8}
+          />
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+function ProfileSwitcher({
+  profiles,
+  activeProfile,
+  onSwitch,
+  onAdd,
+  onDelete,
+}: {
+  profiles: Profile[];
+  activeProfile: Profile;
+  onSwitch: (id: string) => void;
+  onAdd: (name: string, emoji: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmoji, setNewEmoji] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const path = e.composedPath();
+      const inSelf = path.some((el) => el === ref.current);
+      const inPicker = path.some((el) => el instanceof HTMLElement && el.dataset.emojiPicker);
+      if (!inSelf && !inPicker) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 px-2 py-1 rounded-lg text-sm hover:bg-[#252019] cursor-pointer transition-colors"
+      >
+        <span>{activeProfile.emoji}</span>
+        <span className="text-[#5a5044] text-xs">&#9662;</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 min-w-[200px] rounded-lg bg-[#252019] border border-[#3a332a] shadow-lg overflow-hidden">
+          {profiles.map((p) => (
+            <div
+              key={p.id}
+              className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
+                p.id === activeProfile.id ? "bg-[#302a22]" : "hover:bg-[#302a22]"
+              }`}
+              onClick={() => { onSwitch(p.id); setOpen(false); setCreating(false); }}
+            >
+              <span className="text-sm text-[#c4b5a0]">{p.emoji} {p.name}</span>
+              <div className="flex items-center gap-2">
+                {p.id === activeProfile.id && (
+                  <span className="text-xs text-[#7a6a50]">&#10003;</span>
+                )}
+                {profiles.length > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
+                    className="text-[#5a5044] hover:text-red-400 text-sm cursor-pointer"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          <div className="border-t border-[#3a332a]">
+            {creating ? (
+              <form
+                className="flex items-center gap-2 px-3 py-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newName.trim()) {
+                    onAdd(newName.trim(), newEmoji.trim() || "📁");
+                    setNewName("");
+                    setNewEmoji("");
+                    setCreating(false);
+                    setOpen(false);
+                  }
+                }}
+              >
+                <EmojiPickerButton value={newEmoji} onChange={setNewEmoji} />
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Name"
+                  autoFocus
+                  className="flex-1 px-2 py-1 rounded bg-[#0e0c0a] border border-[#3a332a] text-sm text-[#c4b5a0] placeholder-[#5a5044] focus:outline-none focus:border-[#a08860]"
+                />
+                <button
+                  type="submit"
+                  className="text-[#7a6a50] hover:text-[#a08860] text-sm cursor-pointer font-medium"
+                >
+                  Add
+                </button>
+              </form>
+            ) : (
+              <button
+                onClick={() => setCreating(true)}
+                className="w-full text-left px-3 py-2 text-sm text-[#8a7e6e] hover:bg-[#302a22] cursor-pointer transition-colors"
+              >
+                + New profile
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsPanel({
   channels,
   channelInfos,
+  activeProfile,
   onAdd,
   onRemove,
+  onUpdateProfile,
   onClose,
 }: {
   channels: string[];
   channelInfos: Map<string, ChannelInfo>;
+  activeProfile: Profile;
   onAdd: (handle: string) => void;
   onRemove: (handle: string) => void;
+  onUpdateProfile: (updates: { name?: string; emoji?: string }) => void;
   onClose: () => void;
 }) {
   const [newChannel, setNewChannel] = useState("");
@@ -217,6 +392,8 @@ function SettingsPanel({
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const currentKey = getApiKey() || "";
+  const [profileName, setProfileName] = useState(activeProfile.name);
+  const [profileEmoji, setProfileEmoji] = useState(activeProfile.emoji);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -258,6 +435,23 @@ function SettingsPanel({
           >
             &times;
           </button>
+        </div>
+
+        {/* Profile section */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#8a7e6e] uppercase tracking-wider">Profile</h3>
+          <div className="flex items-center gap-2">
+            <EmojiPickerButton
+              value={profileEmoji}
+              onChange={(emoji) => { setProfileEmoji(emoji); onUpdateProfile({ emoji }); }}
+            />
+            <input
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              onBlur={() => { if (profileName.trim() && profileName !== activeProfile.name) onUpdateProfile({ name: profileName.trim() }); }}
+              className="flex-1 px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] text-sm text-[#c4b5a0] focus:outline-none focus:border-[#a08860]"
+            />
+          </div>
         </div>
 
         {/* Channels section */}
@@ -386,6 +580,8 @@ export default function App() {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profiles, setProfiles] = useState<Profile[]>(getProfiles);
+  const [activeProfile, setActiveProfile] = useState<Profile>(getActiveProfile);
   const drawerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
@@ -626,6 +822,8 @@ export default function App() {
   const handleAddChannel = (handle: string) => {
     const updated = addChannel(handle);
     setChannels(updated);
+    setProfiles(getProfiles());
+    setActiveProfile(getActiveProfile());
     setSelectedChannels((prev) => new Set([...prev, handle]));
     loadVideos();
   };
@@ -633,12 +831,41 @@ export default function App() {
   const handleRemoveChannel = (handle: string) => {
     const updated = removeChannel(handle);
     setChannels(updated);
+    setProfiles(getProfiles());
+    setActiveProfile(getActiveProfile());
     setSelectedChannels((prev) => {
       const next = new Set(prev);
       next.delete(handle);
       return next;
     });
     setVideos((prev) => prev.filter((v) => v.handle !== handle));
+  };
+
+  const switchProfile = (id: string) => {
+    setActiveProfileId(id);
+    const profile = getProfiles().find((p) => p.id === id) || getProfiles()[0];
+    setActiveProfile(profile);
+    setChannels(profile.channels);
+    setSelectedChannels(new Set(profile.channels));
+    setVideos([]);
+    setChannelInfos(new Map());
+    setSelectedVideo(null);
+    setTimeout(() => loadVideos(), 0);
+  };
+
+  const handleAddProfile = (name: string, emoji: string) => {
+    const updated = addProfile(name, emoji);
+    setProfiles(updated);
+    const newProfile = updated[updated.length - 1];
+    switchProfile(newProfile.id);
+  };
+
+  const handleDeleteProfile = (id: string) => {
+    const updated = deleteProfile(id);
+    setProfiles(updated);
+    if (activeProfile.id === id) {
+      switchProfile(updated[0].id);
+    }
   };
 
   if (!hasKey) {
@@ -673,7 +900,16 @@ export default function App() {
         style={selectedVideo && dragOffset != null ? { transform: `translateX(${dragOffset}px)` } : undefined}
       >
         <div className="flex items-center justify-between mb-3 px-1">
-          <h1 className="text-lg font-bold text-[#d4c5b0]"><button onClick={() => { setSelectedVideo(null); setSidebarOpen(false); }} className="cursor-pointer hover:text-[#e8d9c4]">Tubo</button></h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-[#d4c5b0]"><button onClick={() => { setSelectedVideo(null); setSidebarOpen(false); }} className="cursor-pointer hover:text-[#e8d9c4]">Tubo</button></h1>
+            <ProfileSwitcher
+              profiles={profiles}
+              activeProfile={activeProfile}
+              onSwitch={switchProfile}
+              onAdd={handleAddProfile}
+              onDelete={handleDeleteProfile}
+            />
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSettingsOpen(true)}
@@ -789,8 +1025,14 @@ export default function App() {
         <SettingsPanel
           channels={channels}
           channelInfos={channelInfos}
+          activeProfile={activeProfile}
           onAdd={handleAddChannel}
           onRemove={handleRemoveChannel}
+          onUpdateProfile={(updates) => {
+            const updated = updateProfile(activeProfile.id, updates);
+            setProfiles(updated);
+            setActiveProfile(updated.find((p) => p.id === activeProfile.id) || updated[0]);
+          }}
           onClose={() => setSettingsOpen(false)}
         />
       )}
