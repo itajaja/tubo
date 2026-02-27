@@ -16,6 +16,7 @@ export default function SettingsPanel({
   onUpdateProfile,
   onToggleFilterShorts,
   onSignOut,
+  onImportSubscriptions,
   onClose,
 }: {
   channels: string[];
@@ -29,6 +30,7 @@ export default function SettingsPanel({
   onUpdateProfile: (updates: { name?: string; emoji?: string }) => void;
   onToggleFilterShorts: () => void;
   onSignOut: () => void;
+  onImportSubscriptions: () => void;
   onClose: () => void;
 }) {
   const [newChannel, setNewChannel] = useState("");
@@ -164,6 +166,12 @@ export default function SettingsPanel({
               </div>
             )}
           </div>
+          <button
+            onClick={onImportSubscriptions}
+            className="w-full py-2 rounded-lg border border-[#3a332a] text-sm text-[#8a7e6e] hover:text-[#c4b5a0] hover:border-[#5a5044] cursor-pointer transition-colors"
+          >
+            Import from YouTube
+          </button>
         </div>
 
         {/* Preferences section */}

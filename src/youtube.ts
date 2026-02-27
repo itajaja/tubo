@@ -138,6 +138,48 @@ export async function searchChannels(query: string): Promise<ChannelSearchResult
   }));
 }
 
+export interface Subscription {
+  channelId: string;
+  title: string;
+  handle: string;
+  thumbnail: string;
+}
+
+export async function getMySubscriptions(): Promise<Subscription[]> {
+  const subs: Subscription[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params: Record<string, string> = {
+      mine: "true",
+      part: "snippet",
+      maxResults: "50",
+    };
+    if (pageToken) params.pageToken = pageToken;
+    const data = await ytFetch("subscriptions", params);
+    for (const item of data.items || []) {
+      subs.push({
+        channelId: item.snippet.resourceId.channelId,
+        title: item.snippet.title,
+        handle: "",
+        thumbnail: item.snippet.thumbnails.default?.url || "",
+      });
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  // Resolve handles in batches of 50
+  for (let i = 0; i < subs.length; i += 50) {
+    const batch = subs.slice(i, i + 50);
+    const ids = batch.map((s) => s.channelId).join(",");
+    const details = await ytFetch("channels", { id: ids, part: "snippet" });
+    for (const ch of details.items || []) {
+      const sub = batch.find((s) => s.channelId === ch.id);
+      if (sub) sub.handle = ch.snippet.customUrl?.replace(/^@/, "") || "";
+    }
+  }
+  return subs.filter((s) => s.handle);
+}
+
 async function attachVideoDetails(videos: Video[]): Promise<VideoWithDetails[]> {
   if (videos.length === 0) return [];
   const ids = videos.map((v) => v.videoId).join(",");

@@ -24,6 +24,7 @@ import VideoCard from "./VideoCard";
 import ChannelPills from "./ChannelPills";
 import ProfileSwitcher from "./ProfileSwitcher";
 import SettingsPanel from "./SettingsPanel";
+import ImportWizard from "./ImportWizard";
 
 function SignInScreen() {
   const [signingIn, setSigningIn] = useState(false);
@@ -170,6 +171,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
@@ -517,6 +519,21 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     await doSignOut();
   };
 
+  const handleImport = (assignments: Map<string, string>) => {
+    updateConfig((prev) => {
+      const updated = prev.profiles.map((p) => {
+        const newHandles = [...assignments.entries()]
+          .filter(([, pid]) => pid === p.id)
+          .map(([handle]) => handle)
+          .filter((h) => !p.channels.includes(h));
+        if (newHandles.length === 0) return p;
+        return { ...p, channels: [...p.channels, ...newHandles] };
+      });
+      return { ...prev, profiles: updated };
+    });
+    setImportOpen(false);
+  };
+
   const handlePip = useCallback(async () => {
     const playerContainer = document.getElementById("tubo-player");
     if (!playerContainer || !("documentPictureInPicture" in window)) return;
@@ -720,7 +737,17 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
             updateConfig((prev) => ({ ...prev, filterShorts: !prev.filterShorts }));
           }}
           onSignOut={handleSignOut}
+          onImportSubscriptions={() => { setSettingsOpen(false); setImportOpen(true); }}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {importOpen && (
+        <ImportWizard
+          profiles={profiles}
+          existingChannels={new Set(profiles.flatMap((p) => p.channels))}
+          onImport={handleImport}
+          onClose={() => setImportOpen(false)}
         />
       )}
     </div>
