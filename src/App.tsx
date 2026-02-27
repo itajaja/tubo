@@ -517,6 +517,20 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     await doSignOut();
   };
 
+  const handlePip = useCallback(async () => {
+    const playerContainer = document.getElementById("tubo-player");
+    if (!playerContainer || !("documentPictureInPicture" in window)) return;
+    const pip = await (window as any).documentPictureInPicture.requestWindow({ width: 640, height: 360 });
+    pip.document.head.innerHTML = `<style>body{margin:0;background:#141110;display:flex;align-items:center;justify-content:center;height:100vh}iframe{width:100%;height:100%;border:none}</style>`;
+    const iframe = playerContainer.querySelector("iframe");
+    if (iframe) pip.document.body.appendChild(iframe);
+    pip.addEventListener("pagehide", () => {
+      const returned = pip.document.querySelector("iframe");
+      if (returned && playerContainer) playerContainer.appendChild(returned);
+    });
+  }, []);
+
+  const hasPip = "documentPictureInPicture" in window;
   const allSelected = selectedChannels.size === channels.length;
   const filteredVideos = (allSelected
     ? videos
@@ -645,15 +659,26 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedVideo(null)}
-                className="ml-2 p-2 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-1">
+                {hasPip && (
+                  <button
+                    onClick={handlePip}
+                    className="p-2 text-[#5a5044] hover:text-[#8a7e6e] text-sm cursor-pointer"
+                    title="Picture in Picture"
+                  >
+                    PiP
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedVideo(null)}
+                  className="ml-2 p-2 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4">
-              <div className="w-full aspect-video">
+              <div id="tubo-player" className="w-full aspect-video">
                 <iframe
                   key={selectedVideo.videoId}
                   src={`https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`}
