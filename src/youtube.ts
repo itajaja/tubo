@@ -24,6 +24,10 @@ export interface Video {
   handle: string;
 }
 
+export interface VideoWithDetails extends Video {
+  duration: number; // seconds
+}
+
 async function ytFetch(endpoint: string, params: Record<string, string>) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("No API key set");
@@ -63,7 +67,7 @@ export async function getLatestVideos(
   handle: string,
   maxResults = 10,
   pageToken?: string
-): Promise<{ videos: Video[]; nextPageToken?: string }> {
+): Promise<{ videos: VideoWithDetails[]; nextPageToken?: string }> {
   const params: Record<string, string> = {
     playlistId: uploadsPlaylistId,
     part: "snippet",
@@ -71,7 +75,7 @@ export async function getLatestVideos(
   };
   if (pageToken) params.pageToken = pageToken;
   const data = await ytFetch("playlistItems", params);
-  const videos = (data.items || []).map((item: any) => ({
+  const rawVideos: Video[] = (data.items || []).map((item: any) => ({
     videoId: item.snippet.resourceId.videoId,
     title: item.snippet.title,
     thumbnail:
@@ -81,13 +85,14 @@ export async function getLatestVideos(
     publishedAt: item.snippet.publishedAt,
     handle,
   }));
+  const videos = await attachVideoDetails(rawVideos);
   return { videos, nextPageToken: data.nextPageToken };
 }
 
-export async function getVideoById(videoId: string): Promise<Video | null> {
+export async function getVideoById(videoId: string): Promise<VideoWithDetails | null> {
   const data = await ytFetch("videos", {
     id: videoId,
-    part: "snippet",
+    part: "snippet,contentDetails",
   });
   if (!data.items?.length) return null;
   const item = data.items[0];
@@ -100,6 +105,7 @@ export async function getVideoById(videoId: string): Promise<Video | null> {
     channelTitle: item.snippet.channelTitle,
     publishedAt: item.snippet.publishedAt,
     handle: "",
+    duration: parseDuration(item.contentDetails?.duration || ""),
   };
 }
 
@@ -131,4 +137,24 @@ export async function searchChannels(query: string): Promise<ChannelSearchResult
     handle: ch.snippet.customUrl?.replace(/^@/, "") || "",
     thumbnail: ch.snippet.thumbnails.default.url,
   }));
+}
+
+async function attachVideoDetails(videos: Video[]): Promise<VideoWithDetails[]> {
+  if (videos.length === 0) return [];
+  const ids = videos.map((v) => v.videoId).join(",");
+  const data = await ytFetch("videos", {
+    id: ids,
+    part: "contentDetails",
+  });
+  const durations = new Map<string, number>();
+  for (const item of data.items || []) {
+    durations.set(item.id, parseDuration(item.contentDetails.duration));
+  }
+  return videos.map((v) => ({ ...v, duration: durations.get(v.videoId) || 0 }));
+}
+
+function parseDuration(iso: string): number {
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] || "0") * 3600) + (parseInt(m[2] || "0") * 60) + parseInt(m[3] || "0");
 }

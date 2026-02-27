@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
-import { getChannels, addChannel, removeChannel, getProfiles, getActiveProfile, setActiveProfileId, addProfile, deleteProfile, updateProfile, Profile } from "./profiles";
+import { getProfiles, addChannelToProfile, removeChannelFromProfile, addProfile, deleteProfile, updateProfile, Profile } from "./profiles";
 import {
   getApiKey,
   setApiKey,
@@ -11,6 +11,7 @@ import {
   getVideoById,
   searchChannels,
   Video,
+  VideoWithDetails,
   ChannelSearchResult,
 } from "./youtube";
 
@@ -22,15 +23,20 @@ function parseUrl() {
   const params = new URLSearchParams(window.location.search);
   const channelsParam = params.get("channels");
   const channels = channelsParam ? channelsParam.split(",").filter(Boolean) : null;
-  return { videoId, channels };
+  const profileParam = params.get("profile");
+  const profileIndex = profileParam !== null ? parseInt(profileParam, 10) : null;
+  return { videoId, channels, profileIndex };
 }
 
-function buildUrl(videoId: string | null, selectedChannels: Set<string>, allChannels: string[]) {
+function buildUrl(videoId: string | null, selectedChannels: Set<string>, allChannels: string[], profileIndex: number) {
   let path = BASE_PATH;
   if (videoId) path += videoId;
+  const params = new URLSearchParams();
   const isAll = selectedChannels.size === allChannels.length || selectedChannels.size === 0;
-  const search = isAll ? "" : "?channels=" + [...selectedChannels].join(",");
-  return path + search;
+  if (!isAll) params.set("channels", [...selectedChannels].join(","));
+  if (profileIndex > 0) params.set("profile", String(profileIndex));
+  const search = params.toString();
+  return path + (search ? "?" + search : "");
 }
 
 interface ChannelInfo {
@@ -80,6 +86,15 @@ function ApiKeyPrompt({ onSave }: { onSave: () => void }) {
   );
 }
 
+function formatDuration(seconds: number): string {
+  if (seconds <= 0) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor(
     (Date.now() - new Date(dateStr).getTime()) / 1000
@@ -105,7 +120,7 @@ function VideoCard({
   isActive,
   watched,
 }: {
-  video: Video;
+  video: VideoWithDetails;
   onClick: () => void;
   isActive: boolean;
   watched: boolean;
@@ -126,6 +141,11 @@ function VideoCard({
         {watched && (
           <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1c1714]/80 text-[#8a7e6e]">
             watched
+          </span>
+        )}
+        {video.duration > 0 && (
+          <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1c1714]/80 text-[#c4b5a0]">
+            {formatDuration(video.duration)}
           </span>
         )}
       </div>
@@ -371,17 +391,21 @@ function SettingsPanel({
   channels,
   channelInfos,
   activeProfile,
+  filterShorts,
   onAdd,
   onRemove,
   onUpdateProfile,
+  onToggleFilterShorts,
   onClose,
 }: {
   channels: string[];
   channelInfos: Map<string, ChannelInfo>;
   activeProfile: Profile;
+  filterShorts: boolean;
   onAdd: (handle: string) => void;
   onRemove: (handle: string) => void;
   onUpdateProfile: (updates: { name?: string; emoji?: string }) => void;
+  onToggleFilterShorts: () => void;
   onClose: () => void;
 }) {
   const [newChannel, setNewChannel] = useState("");
@@ -505,6 +529,20 @@ function SettingsPanel({
           </div>
         </div>
 
+        {/* Preferences section */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#8a7e6e] uppercase tracking-wider">Preferences</h3>
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm text-[#c4b5a0]">Hide short videos (&lt;3min)</span>
+            <button
+              onClick={onToggleFilterShorts}
+              className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${filterShorts ? "bg-[#7a6a50]" : "bg-[#3a332a]"}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-[#d4c5b0] transition-transform mx-0.5 ${filterShorts ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+          </label>
+        </div>
+
         {/* API Key section */}
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-[#8a7e6e] uppercase tracking-wider">API Key</h3>
@@ -552,23 +590,36 @@ function SettingsPanel({
 
 const initialUrl = parseUrl();
 
+function getInitialProfile(): { profiles: Profile[]; active: Profile } {
+  const profiles = getProfiles();
+  const idx = initialUrl.profileIndex;
+  if (idx !== null && !isNaN(idx) && idx >= 0 && idx < profiles.length) {
+    return { profiles, active: profiles[idx] };
+  }
+  return { profiles, active: profiles[0] };
+}
+
+const initialProfile = getInitialProfile();
+
 export default function App() {
   const [hasKey, setHasKey] = useState(!!getApiKey());
-  const [channels, setChannels] = useState<string[]>(getChannels);
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfile.profiles);
+  const [activeProfile, setActiveProfile] = useState<Profile>(initialProfile.active);
+  const [channels, setChannels] = useState<string[]>(() => activeProfile.channels);
   const [channelInfos, setChannelInfos] = useState<Map<string, ChannelInfo>>(
     new Map()
   );
-  const [videos, setVideos] = useState<Video[]>([]);
+  const [videos, setVideos] = useState<VideoWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoWithDetails | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(() => {
     if (initialUrl.channels) {
-      const valid = initialUrl.channels.filter(c => getChannels().includes(c));
+      const valid = initialUrl.channels.filter(c => activeProfile.channels.includes(c));
       if (valid.length > 0) return new Set(valid);
     }
-    return new Set(getChannels());
+    return new Set(activeProfile.channels);
   });
   const [watchedIds, setWatchedIds] = useState<Set<string>>(() => {
     try {
@@ -580,8 +631,7 @@ export default function App() {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [profiles, setProfiles] = useState<Profile[]>(getProfiles);
-  const [activeProfile, setActiveProfile] = useState<Profile>(getActiveProfile);
+  const [filterShorts, setFilterShorts] = useState(() => localStorage.getItem("tubo_filter_shorts") !== "false");
   const drawerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
@@ -676,7 +726,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     pageTokensRef.current = {};
-    const currentChannels = getChannels();
+    const currentChannels = channels;
     try {
       const channelResults = await Promise.allSettled(
         currentChannels.map(async (handle) => {
@@ -699,7 +749,7 @@ export default function App() {
       const videoResults = await Promise.allSettled(
         resolved.map((ch) => getLatestVideos(ch.uploadsPlaylistId, ch.handle))
       );
-      const allVideos: Video[] = [];
+      const allVideos: VideoWithDetails[] = [];
       const tokens: Record<string, string> = {};
       videoResults.forEach((r, i) => {
         if (r.status === "fulfilled") {
@@ -741,7 +791,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [markWatched]);
+  }, [markWatched, channels]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current) return;
@@ -757,7 +807,7 @@ export default function App() {
         infos.map((info) => getLatestVideos(info.uploadsPlaylistId, info.handle, 10, tokens[info.handle]))
       );
       if (gen !== genRef.current) return;
-      const newVideos: Video[] = [];
+      const newVideos: VideoWithDetails[] = [];
       const newTokens = { ...pageTokensRef.current };
       results.forEach((r, i) => {
         if (r.status === "fulfilled") {
@@ -813,26 +863,29 @@ export default function App() {
 
   // Sync URL with selected video and channel filter
   useEffect(() => {
-    const url = buildUrl(selectedVideo?.videoId ?? null, selectedChannels, channels);
+    const profileIdx = profiles.findIndex((p) => p.id === activeProfile.id);
+    const url = buildUrl(selectedVideo?.videoId ?? null, selectedChannels, channels, profileIdx >= 0 ? profileIdx : 0);
     if (url !== window.location.pathname + window.location.search) {
       window.history.replaceState(null, "", url);
     }
-  }, [selectedVideo, selectedChannels, channels]);
+  }, [selectedVideo, selectedChannels, channels, activeProfile, profiles]);
 
   const handleAddChannel = (handle: string) => {
-    const updated = addChannel(handle);
-    setChannels(updated);
-    setProfiles(getProfiles());
-    setActiveProfile(getActiveProfile());
+    const updatedProfiles = addChannelToProfile(activeProfile.id, handle);
+    const updatedProfile = updatedProfiles.find((p) => p.id === activeProfile.id) || updatedProfiles[0];
+    setProfiles(updatedProfiles);
+    setActiveProfile(updatedProfile);
+    setChannels(updatedProfile.channels);
     setSelectedChannels((prev) => new Set([...prev, handle]));
     loadVideos();
   };
 
   const handleRemoveChannel = (handle: string) => {
-    const updated = removeChannel(handle);
-    setChannels(updated);
-    setProfiles(getProfiles());
-    setActiveProfile(getActiveProfile());
+    const updatedProfiles = removeChannelFromProfile(activeProfile.id, handle);
+    const updatedProfile = updatedProfiles.find((p) => p.id === activeProfile.id) || updatedProfiles[0];
+    setProfiles(updatedProfiles);
+    setActiveProfile(updatedProfile);
+    setChannels(updatedProfile.channels);
     setSelectedChannels((prev) => {
       const next = new Set(prev);
       next.delete(handle);
@@ -842,15 +895,13 @@ export default function App() {
   };
 
   const switchProfile = (id: string) => {
-    setActiveProfileId(id);
-    const profile = getProfiles().find((p) => p.id === id) || getProfiles()[0];
+    const profile = profiles.find((p) => p.id === id) || profiles[0];
     setActiveProfile(profile);
     setChannels(profile.channels);
     setSelectedChannels(new Set(profile.channels));
     setVideos([]);
     setChannelInfos(new Map());
     setSelectedVideo(null);
-    setTimeout(() => loadVideos(), 0);
   };
 
   const handleAddProfile = (name: string, emoji: string) => {
@@ -873,9 +924,10 @@ export default function App() {
   }
 
   const allSelected = selectedChannels.size === channels.length;
-  const filteredVideos = allSelected
+  const filteredVideos = (allSelected
     ? videos
-    : videos.filter((v) => selectedChannels.has(v.handle));
+    : videos.filter((v) => selectedChannels.has(v.handle))
+  ).filter((v) => !filterShorts || v.duration === 0 || v.duration > 180);
 
   return (
     <div className="flex h-screen bg-[#1c1714] text-[#c4b5a0]">
@@ -896,7 +948,7 @@ export default function App() {
           selectedVideo
             ? `fixed z-50 inset-y-0 left-0 w-3/4 md:relative md:w-[420px] md:min-w-[420px] ${dragOffset == null ? "transition-transform duration-300" : ""} ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`
             : "w-full md:w-[420px]"
-        } h-full overflow-y-auto bg-[#1c1714] border-r border-[#302a22] p-3 space-y-1`}
+        } h-full flex flex-col bg-[#1c1714] border-r border-[#302a22] p-3`}
         style={selectedVideo && dragOffset != null ? { transform: `translateX(${dragOffset}px)` } : undefined}
       >
         <div className="flex items-center justify-between mb-3 px-1">
@@ -947,10 +999,13 @@ export default function App() {
           onOnly={(handle) => setSelectedChannels(new Set([handle]))}
         />
 
-        {error && <p className="text-sm text-red-400 px-1">{error}</p>}
+        <div className="relative flex-1 overflow-y-auto space-y-1 min-h-0">
+          <div className="sticky top-0 h-3 -mb-3 z-10 pointer-events-none bg-gradient-to-b from-[#1c1714] to-transparent" />
+
+          {error && <p className="text-sm text-red-400 px-1">{error}</p>}
 
         {!loading && filteredVideos.length === 0 && !error && (
-          <p className="text-sm text-[#5a5044] px-1">No videos found.</p>
+          <p className="text-sm text-[#5a5044] px-1 text-center">No videos found. <button onClick={() => setSettingsOpen(true)} className="underline hover:text-[#8a7e6e] cursor-pointer">Add some channels</button></p>
         )}
 
         {filteredVideos.map((v) => (
@@ -972,6 +1027,7 @@ export default function App() {
             {loadingMore ? "Loading..." : ""}
           </div>
         )}
+        </div>
       </div>
 
       {/* Player / Splash */}
@@ -1026,12 +1082,20 @@ export default function App() {
           channels={channels}
           channelInfos={channelInfos}
           activeProfile={activeProfile}
+          filterShorts={filterShorts}
           onAdd={handleAddChannel}
           onRemove={handleRemoveChannel}
           onUpdateProfile={(updates) => {
             const updated = updateProfile(activeProfile.id, updates);
             setProfiles(updated);
             setActiveProfile(updated.find((p) => p.id === activeProfile.id) || updated[0]);
+          }}
+          onToggleFilterShorts={() => {
+            setFilterShorts((prev) => {
+              const next = !prev;
+              localStorage.setItem("tubo_filter_shorts", String(next));
+              return next;
+            });
           }}
           onClose={() => setSettingsOpen(false)}
         />
