@@ -25,6 +25,7 @@ import ChannelPills from "./ChannelPills";
 import ProfileSwitcher from "./ProfileSwitcher";
 import SettingsPanel from "./SettingsPanel";
 import ImportWizard from "./ImportWizard";
+import YouTubePlayer from "./YouTubePlayer";
 
 function SignInScreen() {
   const [signingIn, setSigningIn] = useState(false);
@@ -176,6 +177,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
   const [listScrolled, setListScrolled] = useState(false);
+  const [queue, setQueue] = useState<VideoWithDetails[]>([]);
 
   const markWatched = useCallback((videoId: string) => {
     updateConfig((prev) => {
@@ -519,6 +521,25 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     await doSignOut();
   };
 
+  const addToQueue = useCallback((video: VideoWithDetails) => {
+    setQueue((prev) => prev.some((v) => v.videoId === video.videoId) ? prev : [...prev, video]);
+  }, []);
+
+  const removeFromQueue = useCallback((videoId: string) => {
+    setQueue((prev) => prev.filter((v) => v.videoId !== videoId));
+  }, []);
+
+  const playNext = useCallback(() => {
+    setQueue((prev) => {
+      if (prev.length === 0) return prev;
+      const [next, ...rest] = prev;
+      markWatched(next.videoId);
+      setSelectedVideo(next);
+      setSidebarOpen(false);
+      return rest;
+    });
+  }, [markWatched]);
+
   const handleImport = (assignments: Map<string, string>) => {
     updateConfig((prev) => {
       const updated = prev.profiles.map((p) => {
@@ -639,13 +660,16 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
             video={v}
             isActive={selectedVideo?.videoId === v.videoId}
             watched={watchedIds.has(v.videoId)}
+            queued={queue.some((q) => q.videoId === v.videoId)}
             onClick={() => {
               markWatched(v.videoId);
               setSelectedVideo(v);
               setSidebarOpen(false);
             }}
+            onQueue={() => addToQueue(v)}
           />
         ))}
+
 
         {(allSelected ? Object.keys(pageTokensRef.current).length > 0 : [...selectedChannels].some(h => pageTokensRef.current[h])) && (
           <div ref={sentinelRef} className="py-4 text-center text-sm text-[#5a5044]">
@@ -695,15 +719,27 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
               </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4">
-              <div id="tubo-player" className="w-full aspect-video">
-                <iframe
-                  key={selectedVideo.videoId}
-                  src={`https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`}
-                  allow="autoplay; encrypted-media"
-                  allowFullScreen
-                  className="w-full h-full rounded-xl"
-                />
-              </div>
+              <YouTubePlayer
+                videoId={selectedVideo.videoId}
+                onEnded={queue.length > 0 ? playNext : undefined}
+              />
+              {queue.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-[#5a5044] font-semibold uppercase tracking-wider">Up next ({queue.length})</p>
+                  {queue.map((v, i) => (
+                    <div key={v.videoId} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-[#1c1714]">
+                      <span className="text-xs text-[#5a5044] w-4 text-center shrink-0">{i + 1}</span>
+                      <p className="text-sm text-[#c4b5a0] truncate flex-1">{v.title}</p>
+                      <button
+                        onClick={() => removeFromQueue(v.videoId)}
+                        className="text-[#5a5044] hover:text-red-400 cursor-pointer text-sm shrink-0"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         ) : (
