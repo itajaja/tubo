@@ -347,6 +347,81 @@ export default function App() {
     }
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
+  const [dragOffset, setDragOffset] = useState<number | null>(null);
+
+  // Edge swipe to open drawer
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      if (window.innerWidth >= 768) return; // md breakpoint
+      const touch = e.touches[0];
+      if (touch.clientX < 20) {
+        dragRef.current = { startX: touch.clientX, startY: touch.clientY, dragging: false, offset: 0, decided: false };
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const drag = dragRef.current;
+      if (!drag || drag.dragging) return; // handled by drawer's own handler once open
+      const touch = e.touches[0];
+      const dx = touch.clientX - drag.startX;
+      const dy = touch.clientY - drag.startY;
+      if (!drag.decided) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        if (Math.abs(dy) > Math.abs(dx)) { dragRef.current = null; return; }
+        drag.decided = true;
+      }
+      if (dx > 10) {
+        drag.dragging = true;
+        setSidebarOpen(true);
+      }
+    };
+    const onTouchEnd = () => { dragRef.current = null; };
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
+  // Drawer drag-to-close gesture handlers
+  const onDrawerTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    dragRef.current = { startX: touch.clientX, startY: touch.clientY, dragging: false, offset: 0, decided: false };
+  }, []);
+
+  const onDrawerTouchMove = useCallback((e: React.TouchEvent) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - drag.startX;
+    const dy = touch.clientY - drag.startY;
+    if (!drag.decided) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      if (Math.abs(dy) > Math.abs(dx)) { dragRef.current = null; setDragOffset(null); return; }
+      drag.decided = true;
+    }
+    const offset = Math.min(0, dx);
+    drag.offset = offset;
+    drag.dragging = true;
+    setDragOffset(offset);
+  }, []);
+
+  const onDrawerTouchEnd = useCallback(() => {
+    const drag = dragRef.current;
+    if (drag?.dragging) {
+      const drawerWidth = drawerRef.current?.offsetWidth || 300;
+      if (Math.abs(drag.offset) > drawerWidth * 0.3) {
+        setSidebarOpen(false);
+      }
+    }
+    dragRef.current = null;
+    setDragOffset(null);
+  }, []);
 
   const markWatched = useCallback((videoId: string) => {
     setWatchedIds((prev) => {
@@ -539,16 +614,28 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-[#1c1714] text-[#c4b5a0]">
-      {/* Video list */}
+      {/* Backdrop */}
+      {selectedVideo && (
+        <div
+          className={`md:hidden fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      {/* Sidebar drawer */}
       <div
+        ref={drawerRef}
+        onTouchStart={selectedVideo ? onDrawerTouchStart : undefined}
+        onTouchMove={selectedVideo ? onDrawerTouchMove : undefined}
+        onTouchEnd={selectedVideo ? onDrawerTouchEnd : undefined}
         className={`${
           selectedVideo
-            ? "hidden md:block w-full md:w-[420px] md:min-w-[420px]"
+            ? `fixed z-50 inset-y-0 left-0 w-3/4 md:relative md:w-[420px] md:min-w-[420px] ${dragOffset == null ? "transition-transform duration-300" : ""} ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`
             : "w-full md:w-[420px]"
-        } h-full overflow-y-auto border-r border-[#302a22] p-3 space-y-1`}
+        } h-full overflow-y-auto bg-[#1c1714] border-r border-[#302a22] p-3 space-y-1`}
+        style={selectedVideo && dragOffset != null ? { transform: `translateX(${dragOffset}px)` } : undefined}
       >
         <div className="flex items-center justify-between mb-3 px-1">
-          <h1 className="text-lg font-bold text-[#d4c5b0]">Tubo</h1>
+          <h1 className="text-lg font-bold text-[#d4c5b0]"><button onClick={() => { setSelectedVideo(null); setSidebarOpen(false); }} className="cursor-pointer hover:text-[#e8d9c4]">Tubo</button></h1>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSettingsOpen(true)}
@@ -601,6 +688,7 @@ export default function App() {
             onClick={() => {
               markWatched(v.videoId);
               setSelectedVideo(v);
+              setSidebarOpen(false);
             }}
           />
         ))}
@@ -613,16 +701,16 @@ export default function App() {
       </div>
 
       {/* Player / Splash */}
-      <div className={`flex-1 flex flex-col bg-[#141110] ${selectedVideo ? "" : "hidden md:flex"}`}>
+      <div className={`flex-1 min-w-0 flex flex-col bg-[#141110] ${selectedVideo ? "" : "hidden md:flex"}`}>
         {selectedVideo ? (
           <>
             <div className="flex items-center justify-between p-3 border-b border-[#302a22]">
               <div className="flex items-center gap-3 min-w-0">
                 <button
-                  onClick={() => setSelectedVideo(null)}
+                  onClick={() => setSidebarOpen(true)}
                   className="md:hidden text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
                 >
-                  &#8592;
+                  &#9776;
                 </button>
                 <div className="min-w-0">
                   <p className="font-medium truncate text-[#d4c5b0]">
@@ -635,19 +723,18 @@ export default function App() {
               </div>
               <button
                 onClick={() => setSelectedVideo(null)}
-                className="hidden md:block ml-4 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
+                className="ml-4 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
               >
                 &times;
               </button>
             </div>
-            <div className="flex-1 flex items-center justify-center p-4 min-h-0">
+            <div className="flex-1 p-2 md:p-4 min-h-0">
               <iframe
                 key={selectedVideo.videoId}
                 src={`https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`}
                 allow="autoplay; encrypted-media"
                 allowFullScreen
-                className="w-full h-full max-h-full rounded-xl"
-                style={{ aspectRatio: "16/9", maxWidth: "calc((100vh - 80px) * 16 / 9)" }}
+                className="w-full h-full rounded-xl"
               />
             </div>
           </>
