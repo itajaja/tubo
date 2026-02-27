@@ -14,6 +14,7 @@ export default function VideoCard({
 }) {
   return (
     <button
+      title={video.title}
       onClick={onClick}
       className={`flex gap-3 p-2 rounded-xl text-left w-full cursor-pointer transition-colors ${
         isActive ? "bg-[#302a22]" : "hover:bg-[#252019]"

@@ -5,7 +5,7 @@ export default function ApiKeyPrompt({ onSave }: { onSave: () => void }) {
   const [key, setKey] = useState("");
   return (
     <div className="flex items-center justify-center h-screen bg-[#1c1714] text-[#c4b5a0]">
-      <div className="max-w-md w-full p-8 space-y-4 bg-[#252019] rounded-2xl border border-[#3a332a]">
+      <div className="max-w-md w-full p-5 md:p-8 space-y-4 bg-[#252019] rounded-2xl border border-[#3a332a] mx-4">
         <h1 className="text-2xl font-bold text-[#d4c5b0]">Tubo</h1>
         <p className="text-sm text-[#8a7e6e]">
           Enter your YouTube Data API v3 key. You can get one for free from the{" "}

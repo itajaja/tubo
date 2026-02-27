@@ -61,6 +61,7 @@ export default function App() {
   const drawerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
+  const [listScrolled, setListScrolled] = useState(false);
 
   // Edge swipe to open drawer
   useEffect(() => {
@@ -388,10 +389,10 @@ export default function App() {
               onDelete={handleDeleteProfile}
             />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setSettingsOpen(true)}
-              className="text-xs text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
+              className="p-2 text-base text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
               title="Settings"
             >
               &#9881;
@@ -399,7 +400,7 @@ export default function App() {
             <button
               onClick={loadVideos}
               disabled={loading}
-              className="text-xs text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer disabled:opacity-50"
+              className="p-2 text-xs text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer disabled:opacity-50"
             >
               {loading ? "Loading..." : "Refresh"}
             </button>
@@ -425,8 +426,8 @@ export default function App() {
           onOnly={(handle) => setSelectedChannels(new Set([handle]))}
         />
 
-        <div className="relative flex-1 overflow-y-auto space-y-1 min-h-0">
-          <div className="sticky top-0 h-3 -mb-3 z-10 pointer-events-none bg-gradient-to-b from-[#1c1714] to-transparent" />
+        <div className="relative flex-1 overflow-y-auto space-y-1 min-h-0" onScroll={(e) => setListScrolled(e.currentTarget.scrollTop > 0)}>
+          <div className={`sticky top-0 h-3 -mb-3 z-10 pointer-events-none bg-gradient-to-b from-[#1c1714] to-transparent transition-opacity ${listScrolled ? "opacity-100" : "opacity-0"}`} />
 
           {error && <p className="text-sm text-red-400 px-1">{error}</p>}
 
@@ -464,7 +465,7 @@ export default function App() {
               <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => setSidebarOpen(true)}
-                  className="md:hidden text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
+                  className="md:hidden p-2 -ml-2 text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
                 >
                   &#9776;
                 </button>
@@ -479,19 +480,21 @@ export default function App() {
               </div>
               <button
                 onClick={() => setSelectedVideo(null)}
-                className="ml-4 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
+                className="ml-2 p-2 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
               >
                 &times;
               </button>
             </div>
-            <div className="flex-1 p-2 md:p-4 min-h-0">
-              <iframe
-                key={selectedVideo.videoId}
-                src={`https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`}
-                allow="autoplay; encrypted-media"
-                allowFullScreen
-                className="w-full h-full rounded-xl"
-              />
+            <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4">
+              <div className="w-full aspect-video">
+                <iframe
+                  key={selectedVideo.videoId}
+                  src={`https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`}
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen
+                  className="w-full h-full rounded-xl"
+                />
+              </div>
             </div>
           </>
         ) : (
