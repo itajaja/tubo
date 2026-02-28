@@ -99,7 +99,7 @@ export default function VideoCard({
         <button
           onClick={onQueue}
           title={queued ? "In queue" : "Add to queue"}
-          className={`self-center p-1.5 rounded cursor-pointer transition-colors shrink-0 opacity-0 group-hover:opacity-100 ${
+          className={`self-center p-1.5 rounded cursor-pointer transition-colors shrink-0 md:opacity-0 md:group-hover:opacity-100 ${
             queued ? "text-[#a08860]" : "text-[#5a5044] hover:text-[#8a7e6e]"
           }`}
         >

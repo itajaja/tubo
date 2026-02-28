@@ -138,6 +138,26 @@ export async function searchChannels(query: string): Promise<ChannelSearchResult
   }));
 }
 
+export async function searchVideos(query: string): Promise<VideoWithDetails[]> {
+  if (!query.trim()) return [];
+  const data = await ytFetch("search", {
+    q: query,
+    type: "video",
+    part: "snippet",
+    maxResults: "12",
+  });
+  if (!data.items?.length) return [];
+  const rawVideos: Video[] = data.items.map((item: any) => ({
+    videoId: item.id.videoId,
+    title: item.snippet.title,
+    thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
+    channelTitle: item.snippet.channelTitle,
+    publishedAt: item.snippet.publishedAt,
+    handle: "",
+  }));
+  return attachVideoDetails(rawVideos);
+}
+
 export interface Subscription {
   channelId: string;
   title: string;

@@ -4,6 +4,7 @@ import {
   resolveChannel,
   getLatestVideos,
   getVideoById,
+  searchVideos,
   setYouTubeToken,
   VideoWithDetails,
 } from "./youtube";
@@ -179,6 +180,10 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   const [dragOffset, setDragOffset] = useState<number | null>(null);
   const [listScrolled, setListScrolled] = useState(false);
   const [queue, setQueue] = useState<VideoWithDetails[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<VideoWithDetails[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const markWatched = useCallback((videoId: string) => {
     updateConfig((prev) => {
@@ -564,6 +569,26 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     pip.document.close();
   }, [selectedVideo]);
 
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    const q = searchQuery.trim();
+    if (q.length < 2) { setSearchResults([]); setSearching(false); return; }
+    setSearching(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const results = await withRetry(() => searchVideos(q));
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+  }, [searchQuery, withRetry]);
+
+  const isSearching = searchQuery.trim().length >= 2;
+
   const hasPip = "documentPictureInPicture" in window;
   const allSelected = selectedChannels.size === channels.length;
   const filteredVideos = (allSelected
@@ -589,12 +614,12 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
         className={`${
           selectedVideo
             ? `fixed z-50 inset-y-0 left-0 w-3/4 md:relative md:w-[420px] md:min-w-[420px] ${dragOffset == null ? "transition-transform duration-300" : ""} ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`
-            : "w-full md:w-[420px]"
-        } h-full flex flex-col bg-[#1c1714] border-r border-[#302a22] p-3`}
+            : "w-full"
+        } h-full flex flex-col bg-[#1c1714] ${selectedVideo ? "border-r border-[#302a22]" : ""} p-3`}
         style={selectedVideo && dragOffset != null ? { transform: `translateX(${dragOffset}px)` } : undefined}
       >
-        <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between mb-3 px-1 gap-3">
+          <div className="flex items-center gap-2 shrink-0">
             <h1 className="text-lg font-bold text-[#d4c5b0]"><button onClick={() => { setSelectedVideo(null); setSidebarOpen(false); }} className="cursor-pointer hover:text-[#e8d9c4]">Tubo</button></h1>
             <ProfileSwitcher
               profiles={profiles}
@@ -604,7 +629,25 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
               onDelete={handleDeleteProfile}
             />
           </div>
-          <div className="flex items-center gap-1">
+          {!selectedVideo && (
+            <div className="relative flex-1 max-w-md hidden md:block">
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search videos..."
+                className="w-full px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => { setSearchQuery(""); setSearchResults([]); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => setSettingsOpen(true)}
               className="p-2 text-base text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
@@ -622,56 +665,119 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
           </div>
         </div>
 
-        <ChannelPills
-          channels={channels}
-          channelInfos={channelInfos}
-          selectedChannels={selectedChannels}
-          onToggle={(handle) => {
-            setSelectedChannels((prev) => {
-              const next = new Set(prev);
-              if (next.has(handle)) {
-                next.delete(handle);
-              } else {
-                next.add(handle);
-              }
-              return next;
-            });
-          }}
-          onSelectAll={() => setSelectedChannels(new Set(channels))}
-          onOnly={(handle) => setSelectedChannels(new Set([handle]))}
-        />
-
-        <div className="relative flex-1 overflow-y-auto space-y-1 min-h-0" onScroll={(e) => setListScrolled(e.currentTarget.scrollTop > 0)}>
-          <div className={`sticky top-0 h-3 -mb-3 z-10 pointer-events-none bg-gradient-to-b from-[#1c1714] to-transparent transition-opacity ${listScrolled ? "opacity-100" : "opacity-0"}`} />
-
-          {error && <p className="text-sm text-red-400 px-1">{error}</p>}
-
-        {!loading && filteredVideos.length === 0 && !error && (
-          <p className="text-sm text-[#5a5044] px-1 text-center">No videos found. <button onClick={() => setSettingsOpen(true)} className="underline hover:text-[#8a7e6e] cursor-pointer">Add some channels</button></p>
-        )}
-
-        {filteredVideos.map((v) => (
-          <VideoCard
-            key={v.videoId}
-            video={v}
-            isActive={selectedVideo?.videoId === v.videoId}
-            watched={watchedIds.has(v.videoId)}
-            queued={queue.some((q) => q.videoId === v.videoId)}
-            onClick={() => {
-              markWatched(v.videoId);
-              setSelectedVideo(v);
-              setSidebarOpen(false);
-            }}
-            onQueue={() => addToQueue(v)}
-          />
-        ))}
-
-
-        {(allSelected ? Object.keys(pageTokensRef.current).length > 0 : [...selectedChannels].some(h => pageTokensRef.current[h])) && (
-          <div ref={sentinelRef} className="py-4 text-center text-sm text-[#5a5044]">
-            {loadingMore ? "Loading..." : ""}
+        {/* Search bar for sidebar mode or mobile */}
+        {selectedVideo && (
+          <div className="relative mb-2 px-1">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search videos..."
+              className="w-full px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(""); setSearchResults([]); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
+              >
+                &times;
+              </button>
+            )}
           </div>
         )}
+
+        {/* Mobile search bar when no video selected */}
+        {!selectedVideo && (
+          <div className="relative mb-2 px-1 md:hidden">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search videos..."
+              className="w-full px-3 py-2 rounded-lg bg-[#0e0c0a] border border-[#3a332a] focus:outline-none focus:border-[#a08860] text-[#c4b5a0] placeholder-[#5a5044] text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(""); setSearchResults([]); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+        )}
+
+        {!isSearching && (
+          <ChannelPills
+            channels={channels}
+            channelInfos={channelInfos}
+            selectedChannels={selectedChannels}
+            onToggle={(handle) => {
+              setSelectedChannels((prev) => {
+                const next = new Set(prev);
+                if (next.has(handle)) {
+                  next.delete(handle);
+                } else {
+                  next.add(handle);
+                }
+                return next;
+              });
+            }}
+            onSelectAll={() => setSelectedChannels(new Set(channels))}
+            onOnly={(handle) => setSelectedChannels(new Set([handle]))}
+          />
+        )}
+
+        <div className={`relative flex-1 overflow-y-auto min-h-0 ${!isSearching && !selectedVideo ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 content-start" : "space-y-1"}`} onScroll={(e) => setListScrolled(e.currentTarget.scrollTop > 0)}>
+          {selectedVideo && <div className={`sticky top-0 h-3 -mb-3 z-10 pointer-events-none bg-gradient-to-b from-[#1c1714] to-transparent transition-opacity ${listScrolled ? "opacity-100" : "opacity-0"}`} />}
+
+          {isSearching ? (
+            <>
+              {searching && <p className="text-sm text-[#5a5044] px-1 text-center py-4">Searching...</p>}
+              {!searching && searchResults.length === 0 && <p className="text-sm text-[#5a5044] px-1 text-center py-4">No results found</p>}
+              {searchResults.map((v) => (
+                <VideoCard
+                  key={v.videoId}
+                  video={v}
+                  isActive={selectedVideo?.videoId === v.videoId}
+                  watched={watchedIds.has(v.videoId)}
+                  onClick={() => {
+                    markWatched(v.videoId);
+                    setSelectedVideo(v);
+                    setSidebarOpen(false);
+                    setSearchQuery("");
+                    setSearchResults([]);
+                  }}
+                />
+              ))}
+            </>
+          ) : (
+            <>
+              {error && <p className="text-sm text-red-400 px-1">{error}</p>}
+              {!loading && filteredVideos.length === 0 && !error && (
+                <p className="text-sm text-[#5a5044] px-1 text-center">No videos found. <button onClick={() => setSettingsOpen(true)} className="underline hover:text-[#8a7e6e] cursor-pointer">Add some channels</button></p>
+              )}
+              {filteredVideos.map((v) => (
+                <VideoCard
+                  key={v.videoId}
+                  video={v}
+                  isActive={selectedVideo?.videoId === v.videoId}
+                  watched={watchedIds.has(v.videoId)}
+                  queued={queue.some((q) => q.videoId === v.videoId)}
+                  grid={!selectedVideo}
+                  onClick={() => {
+                    markWatched(v.videoId);
+                    setSelectedVideo(v);
+                    setSidebarOpen(false);
+                  }}
+                  onQueue={() => addToQueue(v)}
+                />
+              ))}
+              {(allSelected ? Object.keys(pageTokensRef.current).length > 0 : [...selectedChannels].some(h => pageTokensRef.current[h])) && (
+                <div ref={sentinelRef} className="py-4 text-center text-sm text-[#5a5044]">
+                  {loadingMore ? "Loading..." : ""}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
