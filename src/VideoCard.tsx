@@ -8,6 +8,7 @@ export default function VideoCard({
   watched,
   queued,
   onQueue,
+  grid,
 }: {
   video: VideoWithDetails;
   onClick: () => void;
@@ -15,7 +16,49 @@ export default function VideoCard({
   watched: boolean;
   queued?: boolean;
   onQueue?: () => void;
+  grid?: boolean;
 }) {
+  if (grid) {
+    return (
+      <div
+        className={`rounded-xl text-left w-full group transition-colors ${
+          isActive ? "bg-[#302a22]" : "hover:bg-[#252019]"
+        }`}
+      >
+        <button
+          title={video.title}
+          onClick={onClick}
+          className="w-full cursor-pointer text-left"
+        >
+          <div className="relative">
+            <img
+              src={video.thumbnail}
+              alt=""
+              className={`w-full aspect-video object-cover rounded-lg${watched ? " opacity-60" : ""}`}
+            />
+            {watched && (
+              <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1c1714]/80 text-[#8a7e6e]">
+                watched
+              </span>
+            )}
+            {video.duration > 0 && (
+              <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1c1714]/80 text-[#c4b5a0]">
+                {formatDuration(video.duration)}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 px-1 pb-2">
+            <p className="text-sm font-medium text-[#d4c5b0] line-clamp-2">
+              {video.title}
+            </p>
+            <p className="text-xs text-[#8a7e6e] mt-1">{video.channelTitle}</p>
+            <p className="text-xs text-[#5a5044]">{timeAgo(video.publishedAt)}</p>
+          </div>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`flex gap-3 p-2 rounded-xl text-left w-full group transition-colors ${

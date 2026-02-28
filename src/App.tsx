@@ -675,78 +675,70 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
         </div>
       </div>
 
-      {/* Player / Splash */}
-      <div className={`flex-1 min-w-0 flex flex-col bg-[#141110] overflow-hidden ${selectedVideo ? "" : "hidden md:flex"}`}>
-        {selectedVideo ? (
-          <>
-            <div className="flex items-center justify-between p-3 border-b border-[#302a22]">
-              <div className="flex items-center gap-3 min-w-0">
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="md:hidden p-2 -ml-2 text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
-                >
-                  &#9776;
-                </button>
-                <div className="min-w-0">
-                  <p className="font-medium truncate text-[#d4c5b0]">
-                    {selectedVideo.title}
-                  </p>
-                  <p className="text-xs text-[#8a7e6e]">
-                    {selectedVideo.channelTitle}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                {hasPip && (
-                  <button
-                    onClick={handlePip}
-                    className="p-2 text-[#5a5044] hover:text-[#8a7e6e] text-sm cursor-pointer"
-                    title="Picture in Picture"
-                  >
-                    PiP
-                  </button>
-                )}
-                <button
-                  onClick={() => setSelectedVideo(null)}
-                  className="ml-2 p-2 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
-                >
-                  &times;
-                </button>
+      {/* Player */}
+      {selectedVideo && (
+        <div className="flex-1 min-w-0 flex flex-col bg-[#141110] overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b border-[#302a22]">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden p-2 -ml-2 text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
+              >
+                &#9776;
+              </button>
+              <div className="min-w-0">
+                <p className="font-medium truncate text-[#d4c5b0]">
+                  {selectedVideo.title}
+                </p>
+                <p className="text-xs text-[#8a7e6e]">
+                  {selectedVideo.channelTitle}
+                </p>
               </div>
             </div>
-            <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4">
-              <YouTubePlayer
-                ref={playerRef}
-                videoId={selectedVideo.videoId}
-                onEnded={queue.length > 0 ? playNext : undefined}
-              />
-              {queue.length > 0 && (
-                <div className="mt-3 space-y-1">
-                  <p className="text-xs text-[#5a5044] font-semibold uppercase tracking-wider">Up next ({queue.length})</p>
-                  {queue.map((v, i) => (
-                    <div key={v.videoId} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-[#1c1714]">
-                      <span className="text-xs text-[#5a5044] w-4 text-center shrink-0">{i + 1}</span>
-                      <p className="text-sm text-[#c4b5a0] truncate flex-1">{v.title}</p>
-                      <button
-                        onClick={() => removeFromQueue(v.videoId)}
-                        className="text-[#5a5044] hover:text-red-400 cursor-pointer text-sm shrink-0"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  ))}
-                </div>
+            <div className="flex items-center gap-1">
+              {hasPip && (
+                <button
+                  onClick={handlePip}
+                  className="p-2 text-[#5a5044] hover:text-[#8a7e6e] text-sm cursor-pointer"
+                  title="Picture in Picture"
+                >
+                  PiP
+                </button>
               )}
+              <button
+                onClick={() => setSelectedVideo(null)}
+                className="ml-2 p-2 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
+              >
+                &times;
+              </button>
             </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center select-none">
-            <p className="text-8xl mb-6 opacity-20">&#9655;</p>
-            <p className="text-xl font-semibold text-[#3a332a]">Pick something to watch</p>
-            <p className="text-sm text-[#302a22] mt-1">{videos.length} videos from {channelInfos.size} channels</p>
           </div>
-        )}
-      </div>
+          <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4">
+            <YouTubePlayer
+              ref={playerRef}
+              videoId={selectedVideo.videoId}
+              onEnded={queue.length > 0 ? playNext : undefined}
+            />
+            {queue.length > 0 && (
+              <div className="mt-3 space-y-1">
+                <p className="text-xs text-[#5a5044] font-semibold uppercase tracking-wider">Up next ({queue.length})</p>
+                {queue.map((v, i) => (
+                  <div key={v.videoId} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-[#1c1714]">
+                    <span className="text-xs text-[#5a5044] w-4 text-center shrink-0">{i + 1}</span>
+                    <p className="text-sm text-[#c4b5a0] truncate flex-1">{v.title}</p>
+                    <button
+                      onClick={() => removeFromQueue(v.videoId)}
+                      className="text-[#5a5044] hover:text-red-400 cursor-pointer text-sm shrink-0"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {settingsOpen && (
         <SettingsPanel
