@@ -25,7 +25,7 @@ import ChannelPills from "./ChannelPills";
 import ProfileSwitcher from "./ProfileSwitcher";
 import SettingsPanel from "./SettingsPanel";
 import ImportWizard from "./ImportWizard";
-import YouTubePlayer from "./YouTubePlayer";
+import YouTubePlayer, { YouTubePlayerHandle } from "./YouTubePlayer";
 
 function SignInScreen() {
   const [signingIn, setSigningIn] = useState(false);
@@ -174,6 +174,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<YouTubePlayerHandle>(null);
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean; offset: number; decided: boolean } | null>(null);
   const [dragOffset, setDragOffset] = useState<number | null>(null);
   const [listScrolled, setListScrolled] = useState(false);
@@ -557,13 +558,10 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
 
   const handlePip = useCallback(async () => {
     if (!("documentPictureInPicture" in window) || !selectedVideo) return;
+    playerRef.current?.pause();
     const pip = await (window as any).documentPictureInPicture.requestWindow({ width: 640, height: 360 });
-    pip.document.head.innerHTML = `<style>body{margin:0;background:#141110;display:flex;align-items:center;justify-content:center;height:100vh}iframe{width:100%;height:100%;border:none}</style>`;
-    const iframe = document.createElement("iframe");
-    iframe.src = `https://www.youtube-nocookie.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0`;
-    iframe.allow = "autoplay; encrypted-media";
-    iframe.allowFullscreen = true;
-    pip.document.body.appendChild(iframe);
+    pip.document.write(`<!doctype html><html><head><style>*{margin:0;padding:0}body{background:#141110}iframe{width:100vw;height:100vh;border:none}</style></head><body><iframe src="https://www.youtube.com/embed/${selectedVideo.videoId}?autoplay=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></body></html>`);
+    pip.document.close();
   }, [selectedVideo]);
 
   const hasPip = "documentPictureInPicture" in window;
@@ -718,6 +716,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
             </div>
             <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4">
               <YouTubePlayer
+                ref={playerRef}
                 videoId={selectedVideo.videoId}
                 onEnded={queue.length > 0 ? playNext : undefined}
               />

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 
 declare global {
   interface Window {
@@ -30,17 +30,24 @@ function loadYTApi(): Promise<void> {
   });
 }
 
-export default function YouTubePlayer({
-  videoId,
-  onEnded,
-}: {
+export interface YouTubePlayerHandle {
+  pause: () => void;
+}
+
+const YouTubePlayer = forwardRef<YouTubePlayerHandle, {
   videoId: string;
   onEnded?: () => void;
-}) {
+}>(({ videoId, onEnded }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+
+  useImperativeHandle(ref, () => ({
+    pause: () => {
+      playerRef.current?.pauseVideo?.();
+    },
+  }));
 
   useEffect(() => {
     let destroyed = false;
@@ -86,4 +93,6 @@ export default function YouTubePlayer({
       className="w-full aspect-video [&>div]:w-full [&>div]:h-full [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:rounded-xl"
     />
   );
-}
+});
+
+export default YouTubePlayer;
