@@ -14,6 +14,7 @@ interface Channel {
 export interface Video {
   videoId: string;
   title: string;
+  description: string;
   thumbnail: string;
   channelTitle: string;
   publishedAt: string;
@@ -77,6 +78,7 @@ export async function getLatestVideos(
   const rawVideos: Video[] = (data.items || []).map((item: any) => ({
     videoId: item.snippet.resourceId.videoId,
     title: item.snippet.title,
+    description: item.snippet.description || "",
     thumbnail:
       item.snippet.thumbnails.medium?.url ||
       item.snippet.thumbnails.default?.url,
@@ -98,6 +100,7 @@ export async function getVideoById(videoId: string): Promise<VideoWithDetails | 
   return {
     videoId: item.id,
     title: item.snippet.title,
+    description: item.snippet.description || "",
     thumbnail:
       item.snippet.thumbnails.medium?.url ||
       item.snippet.thumbnails.default?.url,
@@ -150,6 +153,7 @@ export async function searchVideos(query: string): Promise<VideoWithDetails[]> {
   const rawVideos: Video[] = data.items.map((item: any) => ({
     videoId: item.id.videoId,
     title: item.snippet.title,
+    description: item.snippet.description || "",
     thumbnail: item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
     channelTitle: item.snippet.channelTitle,
     publishedAt: item.snippet.publishedAt,
