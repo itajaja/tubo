@@ -784,24 +784,14 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
       {/* Player */}
       {selectedVideo && (
         <div className="flex-1 min-w-0 flex flex-col bg-[#141110] overflow-hidden">
-          <div className="flex items-center justify-between p-3 border-b border-[#302a22]">
-            <div className="flex items-center gap-3 min-w-0">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="md:hidden p-2 -ml-2 text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
-              >
-                &#9776;
-              </button>
-              <div className="min-w-0">
-                <p className="font-medium truncate text-[#d4c5b0]">
-                  {selectedVideo.title}
-                </p>
-                <p className="text-xs text-[#8a7e6e]">
-                  {selectedVideo.channelTitle}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between p-2 md:px-4">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-2 text-[#5a5044] hover:text-[#8a7e6e] text-lg cursor-pointer"
+            >
+              &#9776;
+            </button>
+            <div className="flex items-center gap-1 ml-auto">
               {hasPip && (
                 <button
                   onClick={handlePip}
@@ -813,18 +803,28 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
               )}
               <button
                 onClick={() => setSelectedVideo(null)}
-                className="ml-2 p-2 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
+                className="p-2 text-[#5a5044] hover:text-[#8a7e6e] text-xl cursor-pointer"
               >
                 &times;
               </button>
             </div>
           </div>
-          <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4">
+          <div className="flex-1 min-h-0 flex flex-col p-2 md:p-4 overflow-y-auto">
             <YouTubePlayer
               ref={playerRef}
               videoId={selectedVideo.videoId}
               onEnded={queue.length > 0 ? playNext : undefined}
             />
+            <div className="mt-3 space-y-2 px-1">
+              <h2 className="text-lg font-semibold text-[#d4c5b0] leading-snug">{selectedVideo.title}</h2>
+              <div className="flex items-center gap-3 text-sm text-[#8a7e6e]">
+                <span className="font-medium text-[#c4b5a0]">{selectedVideo.channelTitle}</span>
+                <span>{new Date(selectedVideo.publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+              </div>
+              {selectedVideo.description && (
+                <p className="text-sm text-[#8a7e6e] whitespace-pre-line leading-relaxed">{selectedVideo.description}</p>
+              )}
+            </div>
             {queue.length > 0 && (
               <div className="mt-3 space-y-1">
                 <p className="text-xs text-[#5a5044] font-semibold uppercase tracking-wider">Up next ({queue.length})</p>
