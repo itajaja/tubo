@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Profile } from "./profiles";
+import { Profile, ALL_PROFILE_ID } from "./profiles";
 import EmojiPickerButton from "./EmojiPickerButton";
 
 export default function ProfileSwitcher({
@@ -39,35 +39,42 @@ export default function ProfileSwitcher({
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1 px-2 py-1 rounded-lg text-sm hover:bg-[#252019] cursor-pointer transition-colors"
       >
-        <span>{activeProfile.emoji}</span>
+        <span>{activeProfile.id === ALL_PROFILE_ID ? (
+          <span className="text-[#8a7e6e] italic text-xs uppercase tracking-wide">All</span>
+        ) : activeProfile.emoji}</span>
         <span className="text-[#5a5044] text-xs">&#9662;</span>
       </button>
       {open && (
         <div className="absolute left-0 top-full mt-1 z-50 min-w-[200px] rounded-lg bg-[#252019] border border-[#3a332a] shadow-lg overflow-hidden">
-          {profiles.map((p) => (
-            <div
-              key={p.id}
-              className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
-                p.id === activeProfile.id ? "bg-[#302a22]" : "hover:bg-[#302a22]"
-              }`}
-              onClick={() => { onSwitch(p.id); setOpen(false); setCreating(false); }}
-            >
-              <span className="text-sm text-[#c4b5a0]">{p.emoji} {p.name}</span>
-              <div className="flex items-center gap-2">
-                {p.id === activeProfile.id && (
-                  <span className="text-xs text-[#7a6a50]">&#10003;</span>
-                )}
-                {profiles.length > 1 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
-                    className="text-[#5a5044] hover:text-red-400 text-sm cursor-pointer"
-                  >
-                    &times;
-                  </button>
-                )}
+          {profiles.map((p) => {
+            const isAll = p.id === ALL_PROFILE_ID;
+            return (
+              <div
+                key={p.id}
+                className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
+                  p.id === activeProfile.id ? "bg-[#302a22]" : "hover:bg-[#302a22]"
+                } ${isAll ? "border-b border-[#3a332a]" : ""}`}
+                onClick={() => { onSwitch(p.id); setOpen(false); setCreating(false); }}
+              >
+                <span className={`text-sm ${isAll ? "text-[#8a7e6e] italic tracking-wide uppercase text-xs" : "text-[#c4b5a0]"}`}>
+                  {isAll ? "All profiles" : `${p.emoji} ${p.name}`}
+                </span>
+                <div className="flex items-center gap-2">
+                  {p.id === activeProfile.id && (
+                    <span className="text-xs text-[#7a6a50]">&#10003;</span>
+                  )}
+                  {!isAll && profiles.filter(pp => pp.id !== ALL_PROFILE_ID).length > 1 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
+                      className="text-[#5a5044] hover:text-red-400 text-sm cursor-pointer"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div className="border-t border-[#3a332a]">
             {creating ? (
               <form

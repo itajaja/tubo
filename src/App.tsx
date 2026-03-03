@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Profile } from "./profiles";
+import { Profile, ALL_PROFILE_ID, getAllProfile } from "./profiles";
 import {
   resolveChannel,
   getLatestVideos,
@@ -138,9 +138,12 @@ interface MainAppProps {
 }
 
 function MainApp({ user, config, updateConfig }: MainAppProps) {
-  const profiles = config.profiles;
+  const realProfiles = config.profiles;
   const watchedIds = useMemo(() => new Set(config.watchedIds), [config.watchedIds]);
   const filterShorts = config.filterShorts;
+
+  const allProfile = useMemo(() => getAllProfile(realProfiles), [realProfiles]);
+  const profiles = useMemo(() => [allProfile, ...realProfiles], [allProfile, realProfiles]);
 
   const activeProfile = useMemo(() => {
     const idx = initialUrlState.profileIndex;
@@ -151,9 +154,13 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   }, []); // only compute once on mount
 
   const [activeProfileId, setActiveProfileId] = useState(activeProfile.id);
+  const isAllProfile = activeProfileId === ALL_PROFILE_ID;
   const currentProfile = useMemo(
-    () => profiles.find((p) => p.id === activeProfileId) || profiles[0],
-    [profiles, activeProfileId]
+    () => {
+      if (activeProfileId === ALL_PROFILE_ID) return allProfile;
+      return realProfiles.find((p) => p.id === activeProfileId) || realProfiles[0];
+    },
+    [realProfiles, allProfile, activeProfileId]
   );
 
   const channels = currentProfile.channels;
@@ -458,6 +465,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   );
 
   const handleAddChannel = (handle: string) => {
+    if (isAllProfile) return;
     updateConfig((prev) => ({
       ...prev,
       profiles: prev.profiles.map((p) =>
@@ -470,6 +478,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   };
 
   const handleRemoveChannel = (handle: string) => {
+    if (isAllProfile) return;
     updateConfig((prev) => ({
       ...prev,
       profiles: prev.profiles.map((p) =>
@@ -512,13 +521,14 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   };
 
   const handleDeleteProfile = (id: string) => {
-    if (profiles.length <= 1) return;
+    if (id === ALL_PROFILE_ID) return;
+    if (realProfiles.length <= 1) return;
     updateConfig((prev) => ({
       ...prev,
       profiles: prev.profiles.filter((p) => p.id !== id),
     }));
     if (activeProfileId === id) {
-      const remaining = profiles.filter((p) => p.id !== id);
+      const remaining = realProfiles.filter((p) => p.id !== id);
       switchProfile(remaining[0].id);
     }
   };
@@ -648,13 +658,15 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
             </div>
           )}
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="p-2 text-base text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
-              title="Settings"
-            >
-              &#9881;
-            </button>
+            {!isAllProfile && (
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="p-2 text-base text-[#5a5044] hover:text-[#8a7e6e] cursor-pointer"
+                title="Settings"
+              >
+                &#9881;
+              </button>
+            )}
             <button
               onClick={loadVideos}
               disabled={loading}
@@ -753,7 +765,12 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
             <>
               {error && <p className="text-sm text-red-400 px-1">{error}</p>}
               {!loading && filteredVideos.length === 0 && !error && (
-                <p className="text-sm text-[#5a5044] px-1 text-center">No videos found. <button onClick={() => setSettingsOpen(true)} className="underline hover:text-[#8a7e6e] cursor-pointer">Add some channels</button></p>
+                <p className="text-sm text-[#5a5044] px-1 text-center">
+                  No videos found.{" "}
+                  {!isAllProfile && (
+                    <button onClick={() => setSettingsOpen(true)} className="underline hover:text-[#8a7e6e] cursor-pointer">Add some channels</button>
+                  )}
+                </p>
               )}
               {filteredVideos.map((v) => (
                 <VideoCard
@@ -846,7 +863,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
         </div>
       )}
 
-      {settingsOpen && (
+      {settingsOpen && !isAllProfile && (
         <SettingsPanel
           channels={channels}
           channelInfos={channelInfos}
@@ -875,8 +892,8 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
 
       {importOpen && (
         <ImportWizard
-          profiles={profiles}
-          existingChannels={new Set(profiles.flatMap((p) => p.channels))}
+          profiles={realProfiles}
+          existingChannels={new Set(realProfiles.flatMap((p) => p.channels))}
           onImport={handleImport}
           onClose={() => setImportOpen(false)}
         />
