@@ -150,7 +150,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     if (idx !== null && !isNaN(idx) && idx >= 0 && idx < profiles.length) {
       return profiles[idx];
     }
-    return profiles[0];
+    return profiles[1] || profiles[0];
   }, []); // only compute once on mount
 
   const [activeProfileId, setActiveProfileId] = useState(activeProfile.id);
