@@ -601,10 +601,38 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
 
   const hasPip = "documentPictureInPicture" in window;
   const allSelected = selectedChannels.size === channels.length;
+
+  // Safe-to-display watermark, so the merged feed stays correctly date-sorted.
+  // Each channel is fetched a page at a time, so a channel that still has more
+  // pages (a pending nextPageToken) may hold unfetched videos newer than ones
+  // we'd otherwise show from other channels. Its oldest *fetched* video is an
+  // upper bound on the dates of its *unfetched* videos, so we can only safely
+  // show videos at least as new as the newest of those per-channel boundaries.
+  // Anything older is withheld until loadMore advances every pending channel
+  // past it — preventing recent videos from popping in above the fold on scroll.
+  const pageTokens = pageTokensRef.current;
+  const relevantHandles = allSelected
+    ? channels
+    : channels.filter((h) => selectedChannels.has(h));
+  const oldestByHandle = new Map<string, number>();
+  for (const v of videos) {
+    const t = new Date(v.publishedAt).getTime();
+    const cur = oldestByHandle.get(v.handle);
+    if (cur === undefined || t < cur) oldestByHandle.set(v.handle, t);
+  }
+  let cutoff = -Infinity;
+  for (const h of relevantHandles) {
+    if (!pageTokens[h]) continue; // exhausted channel — nothing more to wait for
+    const oldest = oldestByHandle.get(h);
+    if (oldest !== undefined && oldest > cutoff) cutoff = oldest;
+  }
+
   const filteredVideos = (allSelected
     ? videos
     : videos.filter((v) => selectedChannels.has(v.handle))
-  ).filter((v) => !filterShorts || v.duration === 0 || v.duration > 180);
+  )
+    .filter((v) => new Date(v.publishedAt).getTime() >= cutoff)
+    .filter((v) => !filterShorts || v.duration === 0 || v.duration > 180);
 
   return (
     <div className="flex h-dvh bg-[#1c1714] text-[#c4b5a0]">
