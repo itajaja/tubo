@@ -580,6 +580,13 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   }, [selectedVideo]);
 
   useEffect(() => {
+    document.title = selectedVideo ? `${selectedVideo.title} · Tubo` : "Tubo";
+    return () => {
+      document.title = "Tubo";
+    };
+  }, [selectedVideo]);
+
+  useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     const q = searchQuery.trim();
     if (q.length < 2) { setSearchResults([]); setSearching(false); return; }
