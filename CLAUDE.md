@@ -34,11 +34,11 @@ Distraction-free YouTube video viewer. Shows latest videos from a curated list o
 
 ## Deploy
 
-```bash
-bun run deploy  # builds and publishes to gh-pages branch
-```
+Deploys are automatic: every push to `main` runs `.github/workflows/deploy.yml`, which builds with Bun and publishes `dist/` to GitHub Pages via `upload-pages-artifact` / `deploy-pages`. Merging a PR into `main` is all it takes — a run takes well under a minute.
 
-GitHub Pages is configured to serve from the `gh-pages` branch. The repo uses personal git credentials (itajaja / giacomo.tag@gmail.com) stored in `.git/.credentials`.
+The `bun run deploy` script (`gh-pages -d dist`) is a leftover from the old branch-based setup. Pages no longer serves from the `gh-pages` branch, so don't use it.
+
+The repo uses personal git credentials (itajaja / giacomo.tag@gmail.com) stored in `.git/.credentials`.
 
 ## Design
 
