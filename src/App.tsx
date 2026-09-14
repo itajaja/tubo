@@ -187,7 +187,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
   const [dragOffset, setDragOffset] = useState<number | null>(null);
   const [listScrolled, setListScrolled] = useState(false);
   const [queue, setQueue] = useState<VideoWithDetails[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialUrlState.query ?? "");
   const [searchResults, setSearchResults] = useState<VideoWithDetails[]>([]);
   const [searching, setSearching] = useState(false);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -435,7 +435,9 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     selectedChannels,
     channels,
     profileIndex,
+    searchQuery,
     (parsed) => {
+      setSearchQuery(parsed.query ?? "");
       if (parsed.videoId) {
         const found = videos.find(v => v.videoId === parsed.videoId);
         if (found) {
@@ -790,8 +792,6 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
                     markWatched(v.videoId);
                     setSelectedVideo(v);
                     setSidebarOpen(false);
-                    setSearchQuery("");
-                    setSearchResults([]);
                   }}
                 />
               ))}

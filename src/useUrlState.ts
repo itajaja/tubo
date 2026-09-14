@@ -6,6 +6,7 @@ export interface UrlState {
   videoId: string | null;
   channels: string[] | null;
   profileIndex: number | null;
+  query: string | null;
 }
 
 function parseUrl(): UrlState {
@@ -15,15 +16,17 @@ function parseUrl(): UrlState {
   const channels = channelsParam ? channelsParam.split(",").filter(Boolean) : null;
   const profileParam = params.get("profile");
   const profileIndex = profileParam !== null ? parseInt(profileParam, 10) : null;
-  return { videoId, channels, profileIndex };
+  const query = params.get("q") || null;
+  return { videoId, channels, profileIndex, query };
 }
 
-function buildUrl(videoId: string | null, selectedChannels: Set<string>, allChannels: string[], profileIndex: number): string {
+function buildUrl(videoId: string | null, selectedChannels: Set<string>, allChannels: string[], profileIndex: number, query: string): string {
   const params = new URLSearchParams();
   if (videoId) params.set("v", videoId);
   const isAll = selectedChannels.size === allChannels.length || selectedChannels.size === 0;
   if (!isAll) params.set("channels", [...selectedChannels].join(","));
   if (profileIndex > 0) params.set("profile", String(profileIndex));
+  if (query.trim()) params.set("q", query);
   const search = params.toString();
   return BASE_PATH + (search ? "?" + search : "");
 }
@@ -35,6 +38,7 @@ export function useUrlSync(
   selectedChannels: Set<string>,
   allChannels: string[],
   profileIndex: number,
+  query: string,
   onNavigate: (state: UrlState) => void,
 ) {
   const prevVideoRef = useRef(videoId);
@@ -43,19 +47,20 @@ export function useUrlSync(
   onNavigateRef.current = onNavigate;
 
   useEffect(() => {
-    const url = buildUrl(videoId, selectedChannels, allChannels, profileIndex);
+    const url = buildUrl(videoId, selectedChannels, allChannels, profileIndex, query);
     if (url !== window.location.pathname + window.location.search) {
       const videoChanged = videoId !== prevVideoRef.current;
       const profileChanged = profileIndex !== prevProfileRef.current;
       if (videoChanged || profileChanged) {
         window.history.pushState(null, "", url);
       } else {
+        // Typing in the search box shouldn't add a history entry per keystroke.
         window.history.replaceState(null, "", url);
       }
     }
     prevVideoRef.current = videoId;
     prevProfileRef.current = profileIndex;
-  }, [videoId, selectedChannels, allChannels, profileIndex]);
+  }, [videoId, selectedChannels, allChannels, profileIndex, query]);
 
   useEffect(() => {
     const onPopState = () => {
