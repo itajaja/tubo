@@ -497,12 +497,22 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     setVideos((prev) => prev.filter((v) => v.handle !== handle));
   };
 
+  // Search results replace the video list entirely, so a lingering query would
+  // hide the videos of whichever profile you just picked.
+  const clearSearch = () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearching(false);
+  };
+
   const switchProfile = (id: string) => {
     setActiveProfileId(id);
     const profile = profiles.find((p) => p.id === id) || profiles[0];
     setSelectedChannels(new Set(profile.channels));
     setVideos([]);
     setChannelInfos(new Map());
+    clearSearch();
   };
 
   const handleAddProfile = (name: string, emoji: string) => {
@@ -520,6 +530,7 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
     setSelectedChannels(new Set());
     setVideos([]);
     setChannelInfos(new Map());
+    clearSearch();
   };
 
   const handleDeleteProfile = (id: string) => {
