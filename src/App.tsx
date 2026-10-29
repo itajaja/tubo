@@ -879,7 +879,23 @@ function MainApp({ user, config, updateConfig }: MainAppProps) {
               onEnded={queue.length > 0 ? playNext : undefined}
             />
             <div className="mt-3 space-y-2 px-1">
-              <h2 className="text-lg font-semibold text-[#d4c5b0] leading-snug">{selectedVideo.title}</h2>
+              <div className="flex items-start gap-2">
+                <h2 className="flex-1 min-w-0 text-lg font-semibold text-[#d4c5b0] leading-snug">{selectedVideo.title}</h2>
+                <a
+                  href={`https://www.youtube.com/watch?v=${selectedVideo.videoId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 p-1 text-[#5a5044] hover:text-[#8a7e6e]"
+                  title="Open in YouTube"
+                  aria-label="Open in YouTube"
+                >
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <path d="M15 3h6v6" />
+                    <path d="M10 14 21 3" />
+                  </svg>
+                </a>
+              </div>
               <div className="flex items-center gap-3 text-sm text-[#8a7e6e]">
                 <span className="font-medium text-[#c4b5a0]">{selectedVideo.channelTitle}</span>
                 <span>{new Date(selectedVideo.publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
